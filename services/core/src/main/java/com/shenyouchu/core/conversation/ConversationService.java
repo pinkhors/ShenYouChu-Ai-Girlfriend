@@ -13,7 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 public class ConversationService {
@@ -33,7 +32,7 @@ public class ConversationService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConversationView> list(String userId) {
+    public List<ConversationView> list(Long userId) {
         return conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
                         .eq(Conversation::getUserId, userId)
                         .orderByDesc(Conversation::getCreatedAt))
@@ -43,26 +42,25 @@ public class ConversationService {
     }
 
     @Transactional
-    public ConversationView create(String userId, CreateConversationRequest request) {
-        String characterId = resolveCharacterId(request.characterId());
+    public ConversationView create(Long userId, CreateConversationRequest request) {
+        Long characterId = resolveCharacterId(request.characterId());
         Conversation conversation = new Conversation(
-                UUID.randomUUID().toString(),
                 userId,
                 characterId,
                 request.title());
         conversationMapper.insert(conversation);
         activityService.record(userId, "conversation.created", "USER", "core",
-                conversation.getId(), null, null, Map.of("characterId", characterId));
+                conversation.getId(), null, null, Map.of("characterId", String.valueOf(characterId)));
         return ConversationView.from(conversation);
     }
 
     @Transactional(readOnly = true)
-    public ConversationView get(String userId, String conversationId) {
+    public ConversationView get(Long userId, Long conversationId) {
         return ConversationView.from(requireOwned(userId, conversationId));
     }
 
     @Transactional
-    public void delete(String userId, String conversationId) {
+    public void delete(Long userId, Long conversationId) {
         Conversation conversation = requireOwned(userId, conversationId);
         conversationMapper.deleteById(conversation.getId());
         activityService.record(userId, "conversation.deleted", "USER", "core",
@@ -70,7 +68,7 @@ public class ConversationService {
     }
 
     /** 归属校验：查不到或不属于当前用户都返回 404，避免泄露资源存在性。 */
-    private Conversation requireOwned(String userId, String conversationId) {
+    private Conversation requireOwned(Long userId, Long conversationId) {
         Conversation conversation = conversationMapper.selectOne(Wrappers.<Conversation>lambdaQuery()
                 .eq(Conversation::getId, conversationId)
                 .eq(Conversation::getUserId, userId));
@@ -80,9 +78,16 @@ public class ConversationService {
         return conversation;
     }
 
-    private String resolveCharacterId(String requested) {
+    /** 角色 ID 对外是字符串；非数字输入视为非法参数，不落到数据库查询。 */
+    private Long resolveCharacterId(String requested) {
         if (requested != null && !requested.isBlank()) {
-            CharacterProfile character = characterMapper.selectById(requested);
+            long characterId;
+            try {
+                characterId = Long.parseLong(requested.trim());
+            } catch (NumberFormatException ex) {
+                throw ApiException.validation("角色 ID 格式不正确");
+            }
+            CharacterProfile character = characterMapper.selectById(characterId);
             if (character == null) {
                 throw ApiException.validation("角色不存在");
             }

@@ -38,13 +38,13 @@ public class ConversationController {
     }
 
     @GetMapping("/{id}")
-    public ConversationView get(@PathVariable String id) {
+    public ConversationView get(@PathVariable Long id) {
         return conversationService.get(CurrentUser.require().userId(), id);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable String id) {
+    public void delete(@PathVariable Long id) {
         conversationService.delete(CurrentUser.require().userId(), id);
     }
 }

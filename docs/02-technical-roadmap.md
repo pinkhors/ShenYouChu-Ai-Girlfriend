@@ -165,7 +165,7 @@ idle → listening → transcribing → retrieving → generating → speaking �
 
 统一约定：
 
-- 主键 UUID 字符串；所有业务表 `created_at / updated_at / deleted_at`；事件类另加 `occurred_at`；
+- 主键与外键为 `BIGINT` 雪花 ID（MyBatis-Plus `ASSIGN_ID`，workerId/datacenterId 由环境变量注入）；对外 JSON 一律以字符串返回 ID；所有业务表 `created_at / updated_at / deleted_at`；事件类另加 `occurred_at`；
 - 时间统一 UTC 存储（`DATETIME(3)`），前端本地展示；
 - 归属字段 `user_id` 不可为空（系统模板表除外），查询必须带归属条件；
 - 逻辑删除用于常规业务隐藏；用户主动"清除"走 `deletion_jobs` 物理级联删除；

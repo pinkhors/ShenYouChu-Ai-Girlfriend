@@ -26,7 +26,7 @@ public class CharacterController {
                         .orderByAsc(CharacterProfile::getDisplayName))
                 .stream()
                 .map(character -> Map.<String, Object>of(
-                        "id", character.getId(),
+                        "id", String.valueOf(character.getId()),
                         "code", character.getCode(),
                         "displayName", character.getDisplayName(),
                         "personaVersion", character.getPersonaVersion()))

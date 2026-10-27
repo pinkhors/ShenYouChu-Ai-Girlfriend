@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.Map;
 import java.util.UUID;
@@ -26,6 +27,14 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .orElse("请求参数不合法");
         return ResponseEntity.badRequest().body(body("VALIDATION_FAILED", message, request));
+    }
+
+    /** 路径/查询参数类型不符（如 ID 传了非数字字符串）：按参数错误返回 400，而不是 500。 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                                  HttpServletRequest request) {
+        return ResponseEntity.badRequest()
+                .body(body("VALIDATION_FAILED", ex.getName() + " 取值不合法", request));
     }
 
     @ExceptionHandler(Exception.class)

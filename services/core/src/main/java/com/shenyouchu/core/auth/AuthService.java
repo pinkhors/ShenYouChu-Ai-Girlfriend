@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -52,7 +51,7 @@ public class AuthService {
         if (exists) {
             throw ApiException.conflict("USERNAME_TAKEN", "用户名已被占用");
         }
-        User user = new User(UUID.randomUUID().toString(), username, passwordEncoder.encode(request.password()));
+        User user = new User(username, passwordEncoder.encode(request.password()));
         try {
             userMapper.insert(user);
         } catch (DuplicateKeyException ex) {
@@ -92,7 +91,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public UserView me(String userId) {
+    public UserView me(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw ApiException.notFound("用户不存在");
@@ -121,7 +120,6 @@ public class AuthService {
         Instant expiresAt = Instant.now().plus(sessionTtl);
         String rawToken = TokenHasher.newToken();
         userSessionMapper.insert(new UserSession(
-                UUID.randomUUID().toString(),
                 user.getId(),
                 TokenHasher.sha256Hex(rawToken),
                 expiresAt));

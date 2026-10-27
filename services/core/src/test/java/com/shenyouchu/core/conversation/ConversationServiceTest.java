@@ -35,7 +35,7 @@ class ConversationServiceTest {
     void readingAnotherUsersConversationReturnsNotFound() {
         when(conversationMapper.selectOne(any())).thenReturn(null);
 
-        assertThatThrownBy(() -> conversationService.get("user-a", "conversation-of-user-b"))
+        assertThatThrownBy(() -> conversationService.get(1L, 2L))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("会话不存在");
     }

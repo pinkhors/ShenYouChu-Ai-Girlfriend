@@ -1,7 +1,7 @@
--- 内置角色：沈幼楚
+-- 内置角色：沈幼楚（id 为固定数值，落在雪花 ID 取值范围内，便于日志与调试识别）
 INSERT INTO characters (id, code, display_name, persona_version, persona_config, is_public)
 VALUES (
-    'char-shenyouchu',
+    1000000000000000001,
     'shenyouchu',
     '沈幼楚',
     'v1',

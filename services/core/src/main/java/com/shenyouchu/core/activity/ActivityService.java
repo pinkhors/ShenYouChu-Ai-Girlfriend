@@ -7,7 +7,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.UUID;
 
 /** 活动事件写入：只记录必要元数据与资源 ID，不复制正文。 */
 @Service
@@ -21,10 +20,9 @@ public class ActivityService {
         this.objectMapper = objectMapper;
     }
 
-    public void record(String userId, String eventType, String actor, String source,
-                       String conversationId, String turnId, String traceId, Map<String, Object> payload) {
+    public void record(Long userId, String eventType, String actor, String source,
+                       Long conversationId, String turnId, String traceId, Map<String, Object> payload) {
         ActivityEvent event = new ActivityEvent(
-                UUID.randomUUID().toString(),
                 userId,
                 eventType,
                 actor,

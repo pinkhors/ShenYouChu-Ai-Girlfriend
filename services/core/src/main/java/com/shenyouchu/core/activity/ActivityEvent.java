@@ -11,12 +11,12 @@ import java.time.Instant;
 @TableName("activity_events")
 public class ActivityEvent extends BaseEntity {
 
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
-    private String userId;
+    private Long userId;
 
-    private String conversationId;
+    private Long conversationId;
 
     private String turnId;
 
@@ -37,10 +37,9 @@ public class ActivityEvent extends BaseEntity {
     protected ActivityEvent() {
     }
 
-    public ActivityEvent(String id, String userId, String eventType, String actor, String source,
-                         Instant occurredAt, String conversationId, String turnId,
+    public ActivityEvent(Long userId, String eventType, String actor, String source,
+                         Instant occurredAt, Long conversationId, String turnId,
                          String traceId, String payload) {
-        this.id = id;
         this.userId = userId;
         this.eventType = eventType;
         this.actor = actor;
@@ -52,27 +51,27 @@ public class ActivityEvent extends BaseEntity {
         this.payload = payload;
     }
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getUserId() {
+    public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(Long userId) {
         this.userId = userId;
     }
 
-    public String getConversationId() {
+    public Long getConversationId() {
         return conversationId;
     }
 
-    public void setConversationId(String conversationId) {
+    public void setConversationId(Long conversationId) {
         this.conversationId = conversationId;
     }
 

@@ -10,8 +10,8 @@ import com.shenyouchu.core.common.BaseEntity;
 @TableName("characters")
 public class CharacterProfile extends BaseEntity {
 
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
     private String code;
 
@@ -27,7 +27,7 @@ public class CharacterProfile extends BaseEntity {
     protected CharacterProfile() {
     }
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 

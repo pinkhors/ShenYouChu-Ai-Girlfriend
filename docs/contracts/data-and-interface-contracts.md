@@ -11,7 +11,7 @@
 
 ### 1.1 标识与时间
 
-- 主键：UUID v4 字符串（数据库 `VARCHAR(36)`），全局唯一，不作为授权凭据；
+- 主键：雪花 ID（数据库 `BIGINT`，Java `Long`，见 [ADR-0005](../adr/0005-snowflake-ids.md)），全局唯一，不作为授权凭据；**API/JSON 中所有 ID 一律以字符串返回，避免 JavaScript 端丢失精度**；
 - 归属：所有用户私有数据含 `user_id`；系统模板表（如 `characters` 预设）可为空但需显式区分；
 - 时间：统一 UTC，数据库 `DATETIME(3)`；对外 API 使用 ISO 8601（带 `Z` 或偏移）；
 - 审计字段：所有业务表 `created_at`、`updated_at`、`deleted_at`（未删为 `NULL`）；
@@ -49,7 +49,7 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
+| id | BIGINT | 主键（雪花 ID） |
 | username | VARCHAR(64) | 唯一 |
 | password_hash | VARCHAR(255) | 强哈希（算法见待确认项 C-1） |
 | status | VARCHAR(20) | active / disabled / deleting |
@@ -66,7 +66,7 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
+| id | BIGINT | 主键（雪花 ID） |
 | code | VARCHAR(64) | 唯一，如 `shenyouchu` |
 | display_name | VARCHAR(64) | 沈幼楚 |
 | persona_version | VARCHAR(20) | 人设版本 |
@@ -80,9 +80,9 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| character_id | VARCHAR(36) | 角色 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| character_id | BIGINT | 角色 |
 | mood | INT | 有界区间（实现定义上下限） |
 | intimacy | INT | 有界，单事件只累加一次 |
 | state_version | BIGINT | 乐观锁 |
@@ -94,9 +94,9 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| character_id | VARCHAR(36) | 角色 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| character_id | BIGINT | 角色 |
 | title | VARCHAR(200) | 可空，可由首条消息生成 |
 | last_message_at | DATETIME(3) | 列表排序 |
 | status | VARCHAR(20) | active / archived |
@@ -110,9 +110,9 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| conversation_id | VARCHAR(36) | 归属会话 |
-| user_id | VARCHAR(36) | 冗余归属，用于强制执行隔离 |
+| id | BIGINT | 主键（雪花 ID） |
+| conversation_id | BIGINT | 归属会话 |
+| user_id | BIGINT | 冗余归属，用于强制执行隔离 |
 | turn_id | VARCHAR(36) | 所属轮次 |
 | role | VARCHAR(16) | user / assistant / system |
 | content | MEDIUMTEXT | 正文 |
@@ -130,10 +130,10 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| conversation_id | VARCHAR(36) | 来源会话，可空 |
-| source_message_id | VARCHAR(36) | 来源消息，可空 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| conversation_id | BIGINT | 来源会话，可空 |
+| source_message_id | BIGINT | 来源消息，可空 |
 | memory_type | VARCHAR(32) | preference / event / relationship / other |
 | content | TEXT | 记忆正文 |
 | status | VARCHAR(20) | active / corrected / deleted |
@@ -149,9 +149,9 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| conversation_id | VARCHAR(36) | 关联会话 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| conversation_id | BIGINT | 关联会话 |
 | room_ref | VARCHAR(128) | 媒体服务房间引用，唯一 |
 | status | VARCHAR(20) | connecting / active / ended / failed |
 | recording_enabled | BOOLEAN | 当次是否录制 |
@@ -164,10 +164,10 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| media_session_id | VARCHAR(36) | 来源 |
-| conversation_id | VARCHAR(36) | 可空 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| media_session_id | BIGINT | 来源 |
+| conversation_id | BIGINT | 可空 |
 | object_key | VARCHAR(512) | `users/{userId}/recordings/{recordingId}/{uuid}.mp4` |
 | bucket | VARCHAR(128) | 私有桶名 |
 | format / duration_ms / size_bytes | VARCHAR / BIGINT | 元数据 |
@@ -183,10 +183,10 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 归属 |
-| media_session_id | VARCHAR(36) | 来源 |
-| conversation_id | VARCHAR(36) | 可空 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属 |
+| media_session_id | BIGINT | 来源 |
+| conversation_id | BIGINT | 可空 |
 | expression_estimate | VARCHAR(32) | smile_like / frown_like / surprise_like / neutral / unknown |
 | posture | VARCHAR(32) | leaning_forward / leaning_back / sideways / neutral / unknown |
 | camera_orientation | VARCHAR(32) | camera_oriented / away / unknown |
@@ -204,9 +204,9 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 服务端派生归属 |
-| conversation_id | VARCHAR(36) | 可空 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 服务端派生归属 |
+| conversation_id | BIGINT | 可空 |
 | turn_id | VARCHAR(36) | 可空 |
 | event_type | VARCHAR(64) | `domain.action`，如 `turn.cancelled` |
 | actor | VARCHAR(16) | USER / AI / SYSTEM |
@@ -229,10 +229,10 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| id | VARCHAR(36) | 主键 |
-| user_id | VARCHAR(36) | 发起用户 |
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 发起用户 |
 | resource_type | VARCHAR(32) | account / conversation / recording / memory |
-| resource_id | VARCHAR(36) | 目标资源，账号删除时为用户 ID |
+| resource_id | BIGINT | 目标资源，账号删除时为用户 ID |
 | status | VARCHAR(20) | pending / running / completed / failed |
 | requested_at / completed_at | DATETIME(3) | 可空 |
 | error | TEXT | 可空，不含敏感数据 |

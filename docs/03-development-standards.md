@@ -84,6 +84,8 @@
 
 - Java 17（当前运行基线）；使用 `record` 表达不可变 DTO；
 - 领域层不依赖 Web 框架类型；持久化统一走 MyBatis-Plus Mapper（见 [ADR-0003](./adr/0003-mybatis-plus-persistence.md)）；
+- 实体主键统一 `Long` + `@TableId(type = IdType.ASSIGN_ID)`（MyBatis-Plus 雪花 ID，数据库 `BIGINT`），归属与引用外键同样用 `Long`；禁止在 Service 层手工生成主键；workerId/datacenterId 来自 `SNOWFLAKE_WORKER_ID` / `SNOWFLAKE_DATACENTER_ID`（见 [ADR-0005](./adr/0005-snowflake-ids.md)）；
+- **对外 JSON 中所有 ID 一律以字符串返回**（DTO 内 `String` 字段 + `String.valueOf(id)`），避免 JavaScript 精度丢失；`turnId`、`traceId` 等链路标识保持 `String`，不作为实体主键；
 - 用户私有数据的 Mapper 方法必须显式包含 `user_id` 条件；`deleted_at` 由 `@TableLogic` 统一过滤，禁止关闭逻辑删除或绕过归属条件；
 - 分页使用 MyBatis-Plus 分页插件，逻辑删除用 `@TableLogic`，并发状态用 `@Version`，审计时间由 `MetaObjectHandler` 写入 UTC；
 - 禁止字符串拼接 SQL；XML 中的动态条件使用参数绑定；

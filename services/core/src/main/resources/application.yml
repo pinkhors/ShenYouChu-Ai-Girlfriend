@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${SERVER_PORT:48080}
   shutdown: graceful
 
 spring:
@@ -25,8 +25,8 @@ mybatis-plus:
   global-config:
     banner: false
     db-config:
-      # UUID 由应用生成，不使用数据库自增
-      id-type: input
+      # 主键由 MyBatis-Plus 雪花算法生成（申请后回填），不使用数据库自增，见 ADR-0005
+      id-type: assign_id
       # deleted_at 为逻辑删除字段：删除写 now(3)，未删除判定为 IS NULL
       logic-delete-field: deletedAt
       logic-delete-value: "now(3)"
@@ -43,6 +43,11 @@ management:
         enabled: true
 
 shenyouchu:
+  id:
+    # 雪花算法实例标识（见 ADR-0005）。本地默认 1/1 仅用于开发；
+    # 分布式部署必须保证每个实例的 worker-id + datacenter-id 组合全局唯一。
+    worker-id: ${SNOWFLAKE_WORKER_ID:1}
+    datacenter-id: ${SNOWFLAKE_DATACENTER_ID:1}
   auth:
     # 会话有效期，默认 30 天
     session-ttl: ${AUTH_SESSION_TTL:30d}

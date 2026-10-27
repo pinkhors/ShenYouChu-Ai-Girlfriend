@@ -10,8 +10,8 @@ import java.time.Instant;
 @TableName("users")
 public class User extends BaseEntity {
 
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
     private String username;
 
@@ -28,17 +28,16 @@ public class User extends BaseEntity {
     protected User() {
     }
 
-    public User(String id, String username, String passwordHash) {
-        this.id = id;
+    public User(String username, String passwordHash) {
         this.username = username;
         this.passwordHash = passwordHash;
     }
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

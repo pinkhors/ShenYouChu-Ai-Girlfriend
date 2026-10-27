@@ -62,7 +62,7 @@ class AuthServiceTest {
 
     @Test
     void loginRejectsWrongPassword() {
-        User user = new User("u-1", "shenyouchu", passwordEncoder.encode("right-password"));
+        User user = new User("shenyouchu", passwordEncoder.encode("right-password"));
         when(userMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(new LoginRequest("shenyouchu", "wrong-password")))
@@ -72,13 +72,14 @@ class AuthServiceTest {
 
     @Test
     void authenticateUsesTokenHashLookup() {
-        User user = new User("u-1", "shenyouchu", passwordEncoder.encode("password123"));
-        UserSession session = new UserSession("s-1", "u-1",
+        User user = new User("shenyouchu", passwordEncoder.encode("password123"));
+        user.setId(1L);
+        UserSession session = new UserSession(1L,
                 TokenHasher.sha256Hex("raw-token"), java.time.Instant.now().plusSeconds(60));
         when(userSessionMapper.selectOne(any())).thenReturn(session);
-        when(userMapper.selectById("u-1")).thenReturn(user);
+        when(userMapper.selectById(1L)).thenReturn(user);
 
         assertThat(authService.authenticate("raw-token")).isPresent()
-                .get().extracting("userId").isEqualTo("u-1");
+                .get().extracting("userId").isEqualTo(1L);
     }
 }

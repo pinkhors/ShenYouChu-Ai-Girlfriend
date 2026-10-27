@@ -11,10 +11,10 @@ import java.time.Instant;
 @TableName("user_sessions")
 public class UserSession extends BaseEntity {
 
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
-    private String userId;
+    private Long userId;
 
     private String tokenHash;
 
@@ -23,26 +23,25 @@ public class UserSession extends BaseEntity {
     protected UserSession() {
     }
 
-    public UserSession(String id, String userId, String tokenHash, Instant expiresAt) {
-        this.id = id;
+    public UserSession(Long userId, String tokenHash, Instant expiresAt) {
         this.userId = userId;
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
     }
 
-    public String getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public String getUserId() {
+    public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(String userId) {
+    public void setUserId(Long userId) {
         this.userId = userId;
     }
 
