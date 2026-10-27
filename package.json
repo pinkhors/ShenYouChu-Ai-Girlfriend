@@ -1,0 +1,12 @@
+{
+  "name": "shenyouchu",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:desktop": "npm run dev --workspace shenyouchu-desktop",
+    "build:desktop": "npm run build --workspace shenyouchu-desktop",
+    "typecheck:desktop": "npm run typecheck --workspace shenyouchu-desktop"
+  }
+}
