@@ -1,0 +1,322 @@
+/* 深色基础主题：不引入外部字体与图片，仅使用系统字体栈与纯色/渐变。 */
+:root {
+  --color-bg: #12131a;
+  --color-surface: #1b1d27;
+  --color-surface-strong: #232634;
+  --color-border: #2f3346;
+  --color-text: #e8e9f0;
+  --color-text-muted: #9aa0b5;
+  --color-accent: #7c8cff;
+  --color-accent-strong: #6675ff;
+  --color-danger: #ff6b81;
+  --radius: 10px;
+  --shadow-card: 0 18px 48px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: radial-gradient(circle at 20% 0%, #1d2033 0%, var(--color-bg) 55%);
+  color: var(--color-text);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 布局 ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.app--centered {
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.workspace {
+  flex: 1;
+  padding: 24px 28px 32px;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--color-border);
+  background: rgba(27, 29, 39, 0.85);
+}
+
+.topbar__identity,
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar__name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.topbar__endpoint {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* ---------- 登录卡片 ---------- */
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.card__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.card__subtitle {
+  margin: 0 0 20px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.card__hint {
+  margin: 18px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+.tab {
+  flex: 1;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tab--active {
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+/* ---------- 表单 ---------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.field__input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field__input:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.field__input:disabled {
+  opacity: 0.6;
+}
+
+/* ---------- 按钮 ---------- */
+
+.button {
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.button--primary {
+  background: var(--color-accent);
+  color: #10121c;
+  font-weight: 600;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+
+.button--ghost {
+  border-color: var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: var(--color-surface-strong);
+}
+
+.button--danger {
+  border-color: rgba(255, 107, 129, 0.45);
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: rgba(255, 107, 129, 0.12);
+}
+
+/* ---------- 提示 ---------- */
+
+.alert {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 107, 129, 0.45);
+  border-radius: var(--radius);
+  background: rgba(255, 107, 129, 0.1);
+  color: #ffc0ca;
+  font-size: 13px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* ---------- 会话面板 ---------- */
+
+.panel {
+  padding: 20px 22px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.creator {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.creator .field__input {
+  flex: 1;
+}
+
+.conversations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-strong);
+}
+
+.conversation__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.conversation__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation__meta {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}

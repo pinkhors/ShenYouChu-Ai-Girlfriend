@@ -1,0 +1,9 @@
+{
+  /* Node 侧（主进程 / 预加载 / 构建配置）的窄口径检查：
+     去掉 DOM 类型，避免渲染进程误用浏览器全局。默认的 pnpm typecheck 走 tsconfig.json。 */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"]
+  },
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*"]
+}

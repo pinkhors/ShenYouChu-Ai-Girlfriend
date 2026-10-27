@@ -45,3 +45,6 @@ recordings/
 *.mp4
 *.wav
 *.pcm
+
+# npm 本地校验缓存
+.npm-cache/

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    /* 语言与模块：仅做类型检查，产物由 electron-vite（Vite + esbuild）生成 */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+
+    /* 严格性：本仓库禁止 any，不安全处用 unknown 收窄（见 docs/03-development-standards.md 3.2） */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "useDefineForClassFields": true,
+    /* 主进程用 Node 类型、渲染进程用 DOM 类型，二者在同一工程内共存，跳过第三方声明文件检查以避免库间噪声 */
+    "skipLibCheck": true
+  },
+  "include": ["electron.vite.config.ts", "src/**/*"]
+}
