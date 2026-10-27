@@ -1,7 +1,8 @@
 # Pull images required by ShenYouChu local development.
+# Images already present locally are skipped.
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1          # M0: mysql + redis
-#   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1 -Full    # also etcd + milvus + minio
+#   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1 -Full    # full stack: + etcd + milvus + minio
 param([switch]$Full)
 
 $ErrorActionPreference = "Continue"
@@ -19,21 +20,34 @@ if ($Full) {
     )
 }
 
+$pulled = @()
+$skipped = @()
 $failed = @()
+
 foreach ($image in $images) {
+    docker image inspect $image *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "SKIP  $image (already present)" -ForegroundColor DarkGray
+        $skipped += $image
+        continue
+    }
+
     Write-Host ""
-    Write-Host "==> docker pull $image" -ForegroundColor Cyan
+    Write-Host "PULL  $image" -ForegroundColor Cyan
     docker pull $image
-    if ($LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -eq 0) {
+        $pulled += $image
+    } else {
         $failed += $image
         Write-Host "FAILED: $image" -ForegroundColor Red
     }
 }
 
 Write-Host ""
+Write-Host "Summary: pulled=$($pulled.Count) skipped=$($skipped.Count) failed=$($failed.Count)"
 if ($failed.Count -gt 0) {
-    Write-Host "Some images failed to pull. Check network or Docker registry mirror:" -ForegroundColor Yellow
+    Write-Host "Failed images (check network or Docker registry mirror):" -ForegroundColor Yellow
     $failed | ForEach-Object { Write-Host "  - $_" }
     exit 1
 }
-Write-Host "All requested images pulled successfully." -ForegroundColor Green
+Write-Host "All required images are available." -ForegroundColor Green
