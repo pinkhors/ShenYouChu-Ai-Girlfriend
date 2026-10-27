@@ -1,5 +1,5 @@
-# 拉取 ShenYouChu 本地开发所需的全部镜像（PowerShell）
-# 用法：powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1
+# Pull all images required by ShenYouChu local development.
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1
 $ErrorActionPreference = "Continue"
 
 $images = @(
@@ -24,8 +24,8 @@ foreach ($image in $images) {
 
 Write-Host ""
 if ($failed.Count -gt 0) {
-    Write-Host "以下镜像拉取失败，请检查网络或 Docker 镜像加速器：" -ForegroundColor Yellow
+    Write-Host "Some images failed to pull. Check network or Docker registry mirror:" -ForegroundColor Yellow
     $failed | ForEach-Object { Write-Host "  - $_" }
     exit 1
 }
-Write-Host "全部镜像拉取完成。" -ForegroundColor Green
+Write-Host "All images pulled successfully." -ForegroundColor Green
