@@ -1,0 +1,46 @@
+# 环境与密钥
+.env
+.env.local
+.env.*.local
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+out/
+target/
+*.class
+.gradle/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 日志与临时文件
+*.log
+logs/
+tmp/
+temp/
+read_prd.py
+
+# 本地数据与容器卷
+data/
+volumes/
+*.sqlite
+*.db
+
+# IDE 与系统
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 模型与媒体样本（不入库）
+models/
+weights/
+recordings/
+*.mp4
+*.wav
+*.pcm

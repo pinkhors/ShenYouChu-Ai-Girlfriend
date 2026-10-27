@@ -1,0 +1,216 @@
+# ShenYouChu AI Girlfriend - 本地开发基础设施
+#
+# 用途：本地开发时启动 MySQL、Redis、Milvus（含 etcd/MinIO 依赖）与业务 MinIO。
+# 说明：
+#   - 只有基础设施，不含应用服务；媒体服务选型确认后再加入。
+#   - 所有端口仅绑定 127.0.0.1，避免暴露到局域网。
+#   - 默认口令仅供本地开发；请复制 .env.example 为 .env 后按需修改。
+#   - 生产环境不要直接使用本文件，需另做 TLS、鉴权、备份与资源限制。
+#
+# 常用命令：
+#   docker compose up -d          启动全部
+#   docker compose ps             查看状态
+#   docker compose logs -f milvus 查看某个服务日志
+#   docker compose down           停止（保留数据卷）
+#   docker compose down -v        停止并删除数据卷（会清空数据）
+
+name: shenyouchu
+
+services:
+  # ---------------------------------------------------------------------------
+  # MySQL：权威业务数据（用户、会话、消息、记忆、活动事件、录像元数据）
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: syc-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-syc_dev_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-shenyouchu}
+      MYSQL_USER: ${MYSQL_USER:-shenyouchu}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-syc_dev_pass}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-43306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - shenyouchu
+
+  # ---------------------------------------------------------------------------
+  # Redis：会话与轮次临时状态、限流、媒体绑定；只存带 TTL 的临时数据
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: syc-redis
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:-syc_dev_redis}",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-syc_dev_redis}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-46379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - shenyouchu
+
+  # ---------------------------------------------------------------------------
+  # MinIO：对象存储。既是 Milvus 的后端存储，也保存业务录像。
+  # 业务桶 shenyouchu 由 minio-init 创建并保持私有。
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: syc-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      # 新版本变量
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sycminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+      # 兼容该镜像版本的旧变量名
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-sycminio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-49000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-49001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - shenyouchu
+
+  # 幂等创建业务桶与 Milvus 桶，并确保匿名访问关闭
+  minio-init:
+    image: minio/mc:latest
+    container_name: syc-minio-init
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sycminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/shenyouchu
+        mc mb --ignore-existing local/milvus
+        mc anonymous set none local/shenyouchu
+        mc anonymous set none local/milvus
+        echo "MinIO buckets ready: shenyouchu, milvus"
+    networks:
+      - shenyouchu
+
+  # ---------------------------------------------------------------------------
+  # etcd：Milvus 元数据依赖，不需要对外暴露端口
+  # ---------------------------------------------------------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: syc-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+      TZ: UTC
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - shenyouchu
+
+  # ---------------------------------------------------------------------------
+  # Milvus standalone：长期记忆语义检索；P2 启用前也可先启动备用
+  # ---------------------------------------------------------------------------
+  milvus:
+    image: milvusdb/milvus:v2.4.0
+    container_name: syc-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sycminio}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+      MINIO_BUCKET_NAME: milvus
+      MINIO_USE_SSL: "false"
+      COMMON_STORAGETYPE: minio
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${MILVUS_PORT:-49530}:19530"
+      - "127.0.0.1:${MILVUS_METRICS_PORT:-49091}:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    networks:
+      - shenyouchu
+
+volumes:
+  mysql_data:
+    name: shenyouchu-mysql-data
+  redis_data:
+    name: shenyouchu-redis-data
+  minio_data:
+    name: shenyouchu-minio-data
+  etcd_data:
+    name: shenyouchu-etcd-data
+  milvus_data:
+    name: shenyouchu-milvus-data
+
+networks:
+  shenyouchu:
+    name: shenyouchu-net
+    driver: bridge
