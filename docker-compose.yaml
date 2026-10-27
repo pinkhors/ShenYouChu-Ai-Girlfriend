@@ -1,18 +1,25 @@
 # ShenYouChu AI Girlfriend - 本地开发基础设施
 #
-# 用途：本地开发时启动 MySQL、Redis、Milvus（含 etcd/MinIO 依赖）与业务 MinIO。
+# 默认启动（M0 必需）：
+#   docker compose up -d              -> mysql + redis
+#
+# 可选完整栈（Milvus 向量库 + S3 兼容对象存储）：
+#   docker compose --profile full up -d
+#
 # 说明：
-#   - 只有基础设施，不含应用服务；媒体服务选型确认后再加入。
 #   - 所有端口仅绑定 127.0.0.1，避免暴露到局域网。
 #   - 默认口令仅供本地开发；请复制 .env.example 为 .env 后按需修改。
+#   - MinIO 已停止发布免费 Docker 镜像，本地对象存储暂用 S3 兼容的 RustFS，
+#     该配置需在启用 full profile 时验证（见 ADR-0004）。
 #   - 生产环境不要直接使用本文件，需另做 TLS、鉴权、备份与资源限制。
 #
 # 常用命令：
-#   docker compose up -d          启动全部
-#   docker compose ps             查看状态
-#   docker compose logs -f milvus 查看某个服务日志
-#   docker compose down           停止（保留数据卷）
-#   docker compose down -v        停止并删除数据卷（会清空数据）
+#   docker compose up -d                     启动 M0 基础设施
+#   docker compose ps                        查看状态
+#   docker compose --profile full up -d      启动含 Milvus 的完整栈
+#   docker compose logs -f milvus            查看某个服务日志
+#   docker compose down                      停止（保留数据卷）
+#   docker compose down -v                   停止并删除数据卷（会清空数据）
 
 name: shenyouchu
 
@@ -82,67 +89,35 @@ services:
       - shenyouchu
 
   # ---------------------------------------------------------------------------
-  # MinIO：对象存储。既是 Milvus 的后端存储，也保存业务录像。
-  # 业务桶 shenyouchu 由 minio-init 创建并保持私有。
+  # 以下服务仅在 --profile full 时启动
   # ---------------------------------------------------------------------------
-  minio:
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
-    container_name: syc-minio
+
+  # S3 兼容对象存储：录像文件与 Milvus 后端存储。
+  # 暂用 RustFS 替代已停止分发镜像的 MinIO，配置待验证（ADR-0004）。
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: syc-rustfs
     restart: unless-stopped
-    command: server /data --console-address ":9001"
+    profiles: ["full"]
     environment:
-      # 新版本变量
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sycminio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
-      # 兼容该镜像版本的旧变量名
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-sycminio}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-sycminio}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-syc_dev_minio}
+      RUSTFS_VOLUMES: /data
       TZ: UTC
     ports:
-      - "127.0.0.1:${MINIO_API_PORT:-49000}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT:-49001}:9001"
+      - "127.0.0.1:${S3_API_PORT:-49000}:9000"
+      - "127.0.0.1:${S3_CONSOLE_PORT:-49001}:9001"
     volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      - rustfs_data:/data
     networks:
       - shenyouchu
 
-  # 幂等创建业务桶与 Milvus 桶，并确保匿名访问关闭
-  minio-init:
-    image: minio/mc:latest
-    container_name: syc-minio-init
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-sycminio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
-        mc mb --ignore-existing local/shenyouchu
-        mc mb --ignore-existing local/milvus
-        mc anonymous set none local/shenyouchu
-        mc anonymous set none local/milvus
-        echo "MinIO buckets ready: shenyouchu, milvus"
-    networks:
-      - shenyouchu
-
-  # ---------------------------------------------------------------------------
   # etcd：Milvus 元数据依赖，不需要对外暴露端口
-  # ---------------------------------------------------------------------------
   etcd:
     image: quay.io/coreos/etcd:v3.5.5
     container_name: syc-etcd
     restart: unless-stopped
+    profiles: ["full"]
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
       ETCD_AUTO_COMPACTION_RETENTION: "1000"
@@ -160,21 +135,20 @@ services:
     networks:
       - shenyouchu
 
-  # ---------------------------------------------------------------------------
-  # Milvus standalone：长期记忆语义检索；P2 启用前也可先启动备用
-  # ---------------------------------------------------------------------------
+  # Milvus standalone：长期记忆语义检索（P2 启用前可先不启动）
   milvus:
     image: milvusdb/milvus:v2.4.0
     container_name: syc-milvus
     restart: unless-stopped
+    profiles: ["full"]
     command: ["milvus", "run", "standalone"]
     security_opt:
       - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-sycminio}
-      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-syc_dev_minio}
+      MINIO_ADDRESS: rustfs:9000
+      MINIO_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-sycminio}
+      MINIO_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-syc_dev_minio}
       MINIO_BUCKET_NAME: milvus
       MINIO_USE_SSL: "false"
       COMMON_STORAGETYPE: minio
@@ -187,8 +161,8 @@ services:
     depends_on:
       etcd:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      rustfs:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:9091/healthz"]
       interval: 10s
@@ -203,8 +177,8 @@ volumes:
     name: shenyouchu-mysql-data
   redis_data:
     name: shenyouchu-redis-data
-  minio_data:
-    name: shenyouchu-minio-data
+  rustfs_data:
+    name: shenyouchu-rustfs-data
   etcd_data:
     name: shenyouchu-etcd-data
   milvus_data:

@@ -32,7 +32,7 @@
 
 - `user_id` 仅来自服务端认证上下文，**任何请求体/查询参数中的 userId 都不作为归属依据**；
 - 按 ID 读取资源时必须同时校验 `user_id`，越权统一返回 404 或 403（不泄露资源是否存在）；
-- Redis、Milvus、MinIO、异步任务、日志同样执行归属约束；
+- Redis、Milvus、对象存储（S3 兼容）、异步任务、日志同样执行归属约束；
 - 跨服务调用传递 ID，接收方重新校验归属。
 
 ### 1.4 分页与幂等
@@ -484,7 +484,7 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 - 维度与模型名随 Embedding 适配器版本记录，禁止混用不同维度索引；
 - 删除记忆时同步删除向量（或标记并异步清理，需可验证）。
 
-### 7.3 MinIO
+### 7.3 对象存储（S3 兼容）
 
 - Bucket 私有；
 - 对象 Key 规范：`users/{userId}/recordings/{recordingId}/{uuid}.mp4`；
@@ -498,7 +498,7 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 | MySQL | 删除/匿名化用户相关行 | 删除 recordings 行 | 删除 memories 行 | 级联 messages 等 |
 | Redis | 删除用户前缀 Key | 清理相关临时状态 | 清理召回缓存 | 清理会话状态 |
 | Milvus | 按 user_id 删除向量 | 无 | 删除对应向量 | 删除关联记忆向量 |
-| MinIO | 清理 `users/{userId}/` 前缀 | 删除对象 | 无 | 可选删除关联录像 |
+| 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 删除对象 | 无 | 可选删除关联录像 |
 | 异步任务 | 取消/清理待执行任务 | 取消归档任务 | 无 | 取消整理任务 |
 | 日志/审计 | 保留最小删除审计 | 记录删除事件 | 记录删除事件 | 记录删除事件 |
 

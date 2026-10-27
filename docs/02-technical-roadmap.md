@@ -35,7 +35,7 @@
 └──────┬───────────────────────┘
        ▼
 ┌────────────────────────────────────────────┐
-│ MySQL │ Redis │ Milvus │ MinIO             │
+│ MySQL │ Redis │ Milvus │ S3 对象存储       │
 └────────────────────────────────────────────┘
        │
        ▼
@@ -50,7 +50,7 @@
 | Gateway/Identity | Spring Boot 模块 | 认证与凭证签发；初期与 Core 同进程，接口独立 |
 | Core Conversation | Spring Boot + Java 17 | 对话、记忆、编排、模型适配 |
 | Media & Vision | WebRTC 服务 + Python worker | 技术栈与资源模型不同，可独立扩容/GPU |
-| Infra | MySQL/Redis/Milvus/MinIO | 通过 Compose 本地启动，接口不因环境变化 |
+| Infra | MySQL/Redis/Milvus/对象存储（S3 兼容） | 通过 Compose 本地启动，接口不因环境变化 |
 
 ### 1.2 选型理由
 
@@ -60,14 +60,14 @@
 - **MySQL**：权威事实存储，事务成熟。
 - **Redis**：会话实时状态与限流缓存，全部带 TTL；不作为权威事实源。
 - **Milvus**：长期记忆语义检索；P0 可先不启用，接口预留。
-- **MinIO**：录像与对象文件私有存储，S3 API。
+- **S3 兼容对象存储**：录像与对象文件私有存储；本地开发用 RustFS（MinIO 已停止分发免费镜像，见 [ADR-0004](./adr/0004-local-object-storage-rustfs.md)），生产可选 MinIO、RustFS 或云 OSS/S3。
 - **WebRTC 媒体服务**：负责实时音视频传输与录像，**不自研 SFU**；候选在 POC 后确定。
 - **Python + MediaPipe**：视觉推理生态与 Java 解耦，可独立部署/扩容。
 
 ### 1.3 明确不采用
 
 - 不为每个 Agent 建独立服务或独立数据库；
-- 不用 MinIO 承担实时传输；
+- 不用对象存储承担实时传输；
 - 不用轮询数据库实现实时对话；
 - 不在首版引入 Kafka/K8s/服务网格；
 - 不把"提前生成、记忆回来再改"作为默认链路（已否决）。
@@ -93,7 +93,7 @@
 ### 2.2 Media & Vision 模块
 
 - Media Gateway：房间生命周期、凭证校验、轨道管理；
-- Recorder：按录制授权异步归档到 MinIO；
+- Recorder：按录制授权异步归档到 对象存储（S3 兼容）；
 - Vision Worker：解码 → MediaPipe → 时序融合 → VisualSignal 发布；
 - Signal Publisher：2Hz 快照 + 状态变化事件，经内部通道发往 Core。
 
@@ -127,7 +127,7 @@
                       ├→ 解码取最新帧（丢弃过期帧）→ MediaPipe
                       │    → 时序平滑/迟滞 → VisualSignal（2Hz + 变化事件）
                       │    → 注入下一轮对话上下文
-                      └→ 授权录制 → 分段 → 封装 → MinIO → 元数据入库
+                      └→ 授权录制 → 分段 → 封装 → 对象存储（S3 兼容） → 元数据入库
 ```
 
 视觉信号字段、置信度与 unknown 规则见契约文档。**低置信度不入提示词**；信号带 `captureTs/inferenceEndTs/emitTs`，便于判断新鲜度与延迟。
@@ -226,16 +226,16 @@ idle → listening → transcribing → retrieving → generating → speaking �
 - **背压与丢弃**：视觉只保最新帧；实时通道有界队列，满则丢弃旧数据而非堆积；
 - **超时与降级**：记忆检索 500ms、模型调用分档超时，超时走降级路径；
 - **资源隔离**：视频解码/推理与对话线程分离；GPU 模型按需独立部署；
-- **容量演进**：并发增加先加无状态实例；存储增长先扩 MinIO；检索压力再拆 Milvus 策略；
+- **容量演进**：并发增加先加无状态实例；存储增长先扩 对象存储（S3 兼容）；检索压力再拆 Milvus 策略；
 - **不提前优化**：以实测瓶颈决定扩容对象。
 
 ## 9. 安全与隐私
 
 - **密钥**：只存服务端环境变量/密钥管理，前端零密钥；日志与错误体不回显密钥；
 - **认证**：短时凭证；媒体与文件凭证服务端签发并限定资源；
-- **存储**：MinIO 私有桶、短期签名 URL、对象 Key 不构成授权；
+- **存储**：对象存储（S3 兼容） 私有桶、短期签名 URL、对象 Key 不构成授权；
 - **数据最小化**：不存原始关键点；活动事件引用正文而非复制；
-- **删除**：`deletion_jobs` 驱动 MySQL/Redis/Milvus/MinIO/任务级联，保留最小删除审计；
+- **删除**：`deletion_jobs` 驱动 MySQL/Redis/Milvus/对象存储（S3 兼容）/任务级联，保留最小删除审计；
 - **日志**：不记录完整对话正文、音频、视频帧与凭证；traceId 关联而非内容复制；
 - **搜索**：索引继承数据隐私级别；用户查询强制本人范围；运营检索必须带事由、默认脱敏并写入 `admin.search.performed` 审计（ADR-0002）；
 - **开源**：`.env.example` 占位，真实密钥与测试媒体禁止入库。

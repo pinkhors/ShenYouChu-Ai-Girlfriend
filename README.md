@@ -9,8 +9,11 @@
 前置：JDK 17、Maven 3.9+、Docker Desktop。
 
 ```bash
-# 1. 启动基础设施（MySQL 43306 / Redis 46379 / MinIO 49000-49001 / Milvus 49530）
+# 1. 启动 M0 基础设施（MySQL 43306 / Redis 46379）
 docker compose up -d
+
+# 可选：完整栈（追加 Milvus 49530 与 S3 对象存储 49000-49001，本地为 RustFS）
+# docker compose --profile full up -d
 
 # 2. 构建并运行核心服务（Flyway 自动建表）
 mvn -B spring-boot:run -pl services/core
@@ -38,7 +41,7 @@ GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
 - [技术实现路线](./docs/02-technical-roadmap.md)
 - [开发规范](./docs/03-development-standards.md)
 - [数据与接口契约](./docs/contracts/data-and-interface-contracts.md)
-- [架构决策记录（ADR）](./docs/adr/0001-frontend-react.md)（另见 [ADR-0002 运营检索边界](./docs/adr/0002-operator-search-audit.md)、[ADR-0003 MyBatis-Plus 持久化](./docs/adr/0003-mybatis-plus-persistence.md)）
+- [架构决策记录（ADR）](./docs/adr/0001-frontend-react.md)（另见 [ADR-0002 运营检索边界](./docs/adr/0002-operator-search-audit.md)、[ADR-0003 MyBatis-Plus 持久化](./docs/adr/0003-mybatis-plus-persistence.md)、[ADR-0004 本地对象存储](./docs/adr/0004-local-object-storage-rustfs.md)）
 - [术语表](./CONTEXT.md)
 
 原始愿景文档：[ShenYouChu-Ai-Girlfriend-产品需求文档PRD.docx](./ShenYouChu-Ai-Girlfriend-产品需求文档PRD.docx)（历史参考，不作为实现依据）。
@@ -49,9 +52,9 @@ GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
 - 核心对话服务 Spring Boot 3.x + Java 17，持久化统一使用 MyBatis-Plus，Gateway/Identity 初期同进程分模块；
 - 媒体与视觉独立部署：WebRTC + Python MediaPipe；
 - 模型先使用云 API，接口可替换，后续支持自托管；
-- 本地 Docker 启动 MySQL、Redis、Milvus、MinIO，后续迁移云服务器；
+- 本地 Docker 启动 MySQL、Redis；Milvus 与 S3 兼容对象存储（本地 RustFS）放在 `full` profile，后续迁移云服务器；
 - 面向开源与多人使用，数据从第一版开始严格隔离；
-- 录像经授权保存到私有 MinIO，实时链路与归档分离；
+- 录像经授权保存到私有 S3 对象存储，实时链路与归档分离；
 - 全局搜索分两类：用户搜索自己的记录（P1，先 MySQL 全文），运营跨用户检索（P2，受控、脱敏、必须审计），后续可切换 OpenSearch。
 
 ## 仓库结构

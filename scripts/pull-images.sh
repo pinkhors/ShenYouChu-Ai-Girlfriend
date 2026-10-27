@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# 拉取 ShenYouChu 本地开发所需的全部镜像（Git Bash / WSL）
-# 用法：bash scripts/pull-images.sh
+# 拉取 ShenYouChu 本地开发镜像（Git Bash / WSL）
+# 用法：
+#   bash scripts/pull-images.sh           # M0: mysql + redis
+#   bash scripts/pull-images.sh --full    # 追加 etcd + milvus + rustfs
 set -uo pipefail
 
 images=(
   "mysql:8.0"
   "redis:7-alpine"
-  "minio/minio:RELEASE.2023-03-20T20-16-18Z"
-  "minio/mc:latest"
-  "quay.io/coreos/etcd:v3.5.5"
-  "milvusdb/milvus:v2.4.0"
 )
+
+if [ "${1:-}" = "--full" ]; then
+  images+=(
+    "quay.io/coreos/etcd:v3.5.5"
+    "milvusdb/milvus:v2.4.0"
+    "rustfs/rustfs:latest"
+  )
+fi
 
 failed=()
 for image in "${images[@]}"; do
@@ -28,4 +34,4 @@ if [ "${#failed[@]}" -gt 0 ]; then
   printf '  - %s\n' "${failed[@]}"
   exit 1
 fi
-echo "全部镜像拉取完成。"
+echo "全部请求的镜像拉取完成。"

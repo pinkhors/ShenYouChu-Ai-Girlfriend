@@ -23,7 +23,7 @@
 │   ├── 03-development-standards.md
 │   ├── contracts/
 │   └── adr/                    # 架构决策记录
-├── docker-compose.yaml        # 本地开发基础设施（MySQL/Redis/MinIO/Milvus）
+├── docker-compose.yaml        # 本地开发基础设施（MySQL/Redis/对象存储（S3 兼容）/Milvus）
 ├── .env.example               # 环境变量模板，真实 .env 不入库
 ├── scripts/                   # 开发与发布脚本
 ├── tests/                     # 跨服务端到端与隔离测试
@@ -175,7 +175,7 @@
 - 记忆检索超时降级且不阻塞；
 - 用户 A 不能读取/进入/下载/取消用户 B 的任何资源；
 - 搜索永远不返回他人内容；运营检索缺少角色或事由时被拒绝，且成功检索必有审计事件；
-- 删除账号后 MySQL/Redis/Milvus/MinIO/任务均无残留（矩阵逐项验证）；
+- 删除账号后 MySQL/Redis/Milvus/对象存储（S3 兼容）/任务均无残留（矩阵逐项验证）；
 - 低置信度视觉信号不进入提示词。
 
 ### 6.3 覆盖率与数据
