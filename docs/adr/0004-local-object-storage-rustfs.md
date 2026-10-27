@@ -12,7 +12,9 @@ MinIO 已停止发布免费 Docker 镜像，`minio/minio` 与 `minio/mc` 在 Doc
 - RustFS 只承担 S3 API 角色，业务与 Milvus 都通过标准 S3 接口访问，不绑定供应商 SDK；
 - Milvus 连接 RustFS 的配置尚未实测，启用 `full` profile 时需验证建桶、读写与重启恢复；
 - 对象 Key、私有桶、短期签名 URL、删除级联等契约保持不变（见数据与接口契约 7.3）；
-- 生产环境不预设 MinIO：可选用自建 MinIO（自行构建镜像）、RustFS、SeaweedFS，或直接使用云对象存储（OSS/S3/COS）；
+- 生产环境不预设 MinIO：可选用自建 MinIO（自行构建镜像）、RustFS、SeaweedFS，或直接使用云对象存储；
+- 阿里云 OSS 提供 S3 兼容 API，但有官方文档化的操作限制，不能假设与 S3 完全等价；接入前必须核验项目实际用到的签名 URL、分片上传、列举与删除操作，必要时为 OSS 增加官方 SDK 适配器；
+- Milvus 使用 OSS 作为后端存储属于风险点，需要单独验证；录像存储与向量存储可以解耦，例如录像走 OSS、Milvus 继续使用本地或自建 S3 存储；
 - 项目自身的录像存储适配器必须通过 S3 接口访问，不允许依赖 MinIO 专有 API。
 
 被否决的方案：

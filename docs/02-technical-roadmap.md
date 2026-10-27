@@ -317,3 +317,4 @@ idle → listening → transcribing → retrieving → generating → speaking �
 | T-13 | 生产环境形态与容量 | 单机 Compose 起，压测后再定 |
 | T-14 | 搜索索引切换 OpenSearch 的触发条件 | 相关性/中文分词/高亮不达标或 MySQL 全文性能不足时 |
 | T-15 | 运营检索脱敏规则与角色审批流程 | 见 ADR-0002；默认摘要与元数据，正文需单独授权 |
+| T-16 | 生产对象存储选型 | 首选阿里云 OSS（S3 兼容模式）；接入前核验签名 URL、分片上传、列举/删除等操作，必要时改用 OSS 官方 SDK 适配器 |
