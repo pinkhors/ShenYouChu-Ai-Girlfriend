@@ -2,7 +2,34 @@
 
 多人各自与 AI 角色**沈幼楚**进行一对一文本、语音和视频陪伴的桌面应用项目。
 
-当前仓库处于**需求与设计阶段**，尚未创建工程代码。请从文档入口开始阅读。
+当前处于 **M0 地基阶段**：文档基线已完成，核心服务骨架（认证、会话归属、活动事件、数据库迁移）可构建；桌面端尚未创建。
+
+## 快速开始
+
+前置：JDK 17、Maven 3.9+、Docker Desktop。
+
+```bash
+# 1. 启动基础设施（MySQL 43306 / Redis 46379 / MinIO 49000-49001 / Milvus 49530）
+docker compose up -d
+
+# 2. 构建并运行核心服务（Flyway 自动建表）
+mvn -B spring-boot:run -pl services/core
+
+# 3. 健康检查
+curl http://127.0.0.1:8080/actuator/health
+```
+
+核心接口（前缀 `/api/v1`）：
+
+```text
+POST /auth/register   注册并返回会话 token
+POST /auth/login      登录
+POST /auth/logout     退出（Bearer token）
+GET  /auth/me         当前用户
+GET  /characters      内置角色（沈幼楚）
+GET/POST /conversations           会话列表/创建
+GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
+```
 
 ## 文档
 
@@ -27,6 +54,15 @@
 - 录像经授权保存到私有 MinIO，实时链路与归档分离；
 - 全局搜索分两类：用户搜索自己的记录（P1，先 MySQL 全文），运营跨用户检索（P2，受控、脱敏、必须审计），后续可切换 OpenSearch。
 
+## 仓库结构
+
+```text
+pom.xml                     # 父 POM，聚合 Java 模块
+docker-compose.yaml         # 本地基础设施
+services/core/              # Spring Boot 核心服务
+docs/                       # PRD、技术路线、开发规范、契约、ADR
+```
+
 ## 状态
 
-需求与技术文档已形成可执行基线；下一步是评审文档并初始化工程骨架。未决问题见各文档的「待确认项」，均给出默认建议，不阻塞开发。
+M0 进行中：核心服务骨架已通过编译与打包；下一步是启动 Docker 基础设施做一次真实注册/登录/会话隔离联调，然后初始化桌面端。未决问题见各文档的「待确认项」，均给出默认建议，不阻塞开发。

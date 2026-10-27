@@ -1,0 +1,98 @@
+package com.shenyouchu.core.conversation;
+
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.shenyouchu.core.activity.ActivityService;
+import com.shenyouchu.core.character.CharacterProfile;
+import com.shenyouchu.core.character.mapper.CharacterMapper;
+import com.shenyouchu.core.common.ApiException;
+import com.shenyouchu.core.conversation.dto.ConversationView;
+import com.shenyouchu.core.conversation.dto.CreateConversationRequest;
+import com.shenyouchu.core.conversation.mapper.ConversationMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+public class ConversationService {
+
+    private static final String DEFAULT_CHARACTER_CODE = "shenyouchu";
+
+    private final ConversationMapper conversationMapper;
+    private final CharacterMapper characterMapper;
+    private final ActivityService activityService;
+
+    public ConversationService(ConversationMapper conversationMapper,
+                               CharacterMapper characterMapper,
+                               ActivityService activityService) {
+        this.conversationMapper = conversationMapper;
+        this.characterMapper = characterMapper;
+        this.activityService = activityService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConversationView> list(String userId) {
+        return conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
+                        .eq(Conversation::getUserId, userId)
+                        .orderByDesc(Conversation::getCreatedAt))
+                .stream()
+                .map(ConversationView::from)
+                .toList();
+    }
+
+    @Transactional
+    public ConversationView create(String userId, CreateConversationRequest request) {
+        String characterId = resolveCharacterId(request.characterId());
+        Conversation conversation = new Conversation(
+                UUID.randomUUID().toString(),
+                userId,
+                characterId,
+                request.title());
+        conversationMapper.insert(conversation);
+        activityService.record(userId, "conversation.created", "USER", "core",
+                conversation.getId(), null, null, Map.of("characterId", characterId));
+        return ConversationView.from(conversation);
+    }
+
+    @Transactional(readOnly = true)
+    public ConversationView get(String userId, String conversationId) {
+        return ConversationView.from(requireOwned(userId, conversationId));
+    }
+
+    @Transactional
+    public void delete(String userId, String conversationId) {
+        Conversation conversation = requireOwned(userId, conversationId);
+        conversationMapper.deleteById(conversation.getId());
+        activityService.record(userId, "conversation.deleted", "USER", "core",
+                conversationId, null, null, Map.of());
+    }
+
+    /** 归属校验：查不到或不属于当前用户都返回 404，避免泄露资源存在性。 */
+    private Conversation requireOwned(String userId, String conversationId) {
+        Conversation conversation = conversationMapper.selectOne(Wrappers.<Conversation>lambdaQuery()
+                .eq(Conversation::getId, conversationId)
+                .eq(Conversation::getUserId, userId));
+        if (conversation == null) {
+            throw ApiException.notFound("会话不存在");
+        }
+        return conversation;
+    }
+
+    private String resolveCharacterId(String requested) {
+        if (requested != null && !requested.isBlank()) {
+            CharacterProfile character = characterMapper.selectById(requested);
+            if (character == null) {
+                throw ApiException.validation("角色不存在");
+            }
+            return character.getId();
+        }
+        CharacterProfile fallback = characterMapper.selectOne(Wrappers.<CharacterProfile>lambdaQuery()
+                .eq(CharacterProfile::getCode, DEFAULT_CHARACTER_CODE));
+        if (fallback == null) {
+            throw ApiException.notFound("默认角色未初始化，请先执行数据库迁移");
+        }
+        return fallback.getId();
+    }
+}

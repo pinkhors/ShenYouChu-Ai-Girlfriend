@@ -84,7 +84,7 @@
 
 - Java 17（当前运行基线）；使用 `record` 表达不可变 DTO；
 - 领域层不依赖 Web 框架类型；持久化统一走 MyBatis-Plus Mapper（见 [ADR-0003](./adr/0003-mybatis-plus-persistence.md)）；
-- 用户私有数据的 Mapper 方法必须显式包含 `user_id` 与 `deleted_at` 条件，禁止提供无归属条件的查询；
+- 用户私有数据的 Mapper 方法必须显式包含 `user_id` 条件；`deleted_at` 由 `@TableLogic` 统一过滤，禁止关闭逻辑删除或绕过归属条件；
 - 分页使用 MyBatis-Plus 分页插件，逻辑删除用 `@TableLogic`，并发状态用 `@Version`，审计时间由 `MetaObjectHandler` 写入 UTC；
 - 禁止字符串拼接 SQL；XML 中的动态条件使用参数绑定；
 - 依赖注入用构造器注入，不用字段注入；

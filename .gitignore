@@ -9,6 +9,7 @@ dist/
 build/
 out/
 target/
+.mvn-repo/
 *.class
 .gradle/
 __pycache__/
