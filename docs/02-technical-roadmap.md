@@ -60,7 +60,7 @@
 - **MySQL**：权威事实存储，事务成熟。
 - **Redis**：会话实时状态与限流缓存，全部带 TTL；不作为权威事实源。
 - **Milvus**：长期记忆语义检索；P0 可先不启用，接口预留。
-- **S3 兼容对象存储**：录像与对象文件私有存储；本地开发用 RustFS（MinIO 已停止分发免费镜像，见 [ADR-0004](./adr/0004-local-object-storage-rustfs.md)），生产可选 MinIO、RustFS 或云 OSS/S3。
+- **S3 兼容对象存储**：录像与对象文件私有存储；本地开发用 bitnamilegacy 的 MinIO 冻结镜像（官方镜像已下架，见 [ADR-0004](./adr/0004-local-object-storage-minio-legacy.md)），生产用阿里云 OSS 或自建 MinIO。
 - **WebRTC 媒体服务**：负责实时音视频传输与录像，**不自研 SFU**；候选在 POC 后确定。
 - **Python + MediaPipe**：视觉推理生态与 Java 解耦，可独立部署/扩容。
 

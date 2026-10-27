@@ -1,7 +1,7 @@
 # Pull images required by ShenYouChu local development.
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1          # M0: mysql + redis
-#   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1 -Full    # also etcd + milvus + rustfs
+#   powershell -ExecutionPolicy Bypass -File scripts/pull-images.ps1 -Full    # also etcd + milvus + minio
 param([switch]$Full)
 
 $ErrorActionPreference = "Continue"
@@ -15,7 +15,7 @@ if ($Full) {
     $images += @(
         "quay.io/coreos/etcd:v3.5.5",
         "milvusdb/milvus:v2.4.0",
-        "rustfs/rustfs:latest"
+        "bitnamilegacy/minio:latest"
     )
 }
 

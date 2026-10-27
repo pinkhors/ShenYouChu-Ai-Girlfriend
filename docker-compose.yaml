@@ -9,8 +9,8 @@
 # 说明：
 #   - 所有端口仅绑定 127.0.0.1，避免暴露到局域网。
 #   - 默认口令仅供本地开发；请复制 .env.example 为 .env 后按需修改。
-#   - MinIO 已停止发布免费 Docker 镜像，本地对象存储暂用 S3 兼容的 RustFS，
-#     该配置需在启用 full profile 时验证（见 ADR-0004）。
+#   - MinIO 官方已停止发布免费 Docker 镜像；本地对象存储使用 Bitnami 冻结的
+#     legacy 镜像（仅限本地开发，生产请用阿里云 OSS 或自建 MinIO）。见 ADR-0004。
 #   - 生产环境不要直接使用本文件，需另做 TLS、鉴权、备份与资源限制。
 #
 # 常用命令：
@@ -92,23 +92,24 @@ services:
   # 以下服务仅在 --profile full 时启动
   # ---------------------------------------------------------------------------
 
-  # S3 兼容对象存储：录像文件与 Milvus 后端存储。
-  # 暂用 RustFS 替代已停止分发镜像的 MinIO，配置待验证（ADR-0004）。
-  rustfs:
-    image: rustfs/rustfs:latest
-    container_name: syc-rustfs
+  # S3 兼容对象存储：录像文件与 Milvus 后端存储（本地开发专用）。
+  # bitnamilegacy 是 MinIO 官方镜像下架后的社区迁移仓库，版本已冻结、不再更新；
+  # 仅限本地开发，生产使用阿里云 OSS 或自建 MinIO（ADR-0004）。
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: syc-minio
     restart: unless-stopped
     profiles: ["full"]
     environment:
-      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-sycminio}
-      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:-syc_dev_minio}
-      RUSTFS_VOLUMES: /data
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-sycminio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-syc_dev_minio}
+      MINIO_DEFAULT_BUCKETS: shenyouchu
       TZ: UTC
     ports:
       - "127.0.0.1:${S3_API_PORT:-49000}:9000"
       - "127.0.0.1:${S3_CONSOLE_PORT:-49001}:9001"
     volumes:
-      - rustfs_data:/data
+      - minio_data:/bitnami/minio/data
     networks:
       - shenyouchu
 
@@ -146,7 +147,7 @@ services:
       - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: rustfs:9000
+      MINIO_ADDRESS: minio:9000
       MINIO_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-sycminio}
       MINIO_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-syc_dev_minio}
       MINIO_BUCKET_NAME: milvus
@@ -161,7 +162,7 @@ services:
     depends_on:
       etcd:
         condition: service_healthy
-      rustfs:
+      minio:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:9091/healthz"]
@@ -177,8 +178,8 @@ volumes:
     name: shenyouchu-mysql-data
   redis_data:
     name: shenyouchu-redis-data
-  rustfs_data:
-    name: shenyouchu-rustfs-data
+  minio_data:
+    name: shenyouchu-minio-data
   etcd_data:
     name: shenyouchu-etcd-data
   milvus_data:

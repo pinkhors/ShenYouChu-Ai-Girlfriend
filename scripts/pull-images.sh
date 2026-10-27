@@ -2,7 +2,7 @@
 # 拉取 ShenYouChu 本地开发镜像（Git Bash / WSL）
 # 用法：
 #   bash scripts/pull-images.sh           # M0: mysql + redis
-#   bash scripts/pull-images.sh --full    # 追加 etcd + milvus + rustfs
+#   bash scripts/pull-images.sh --full    # 追加 etcd + milvus + minio
 set -uo pipefail
 
 images=(
@@ -14,7 +14,7 @@ if [ "${1:-}" = "--full" ]; then
   images+=(
     "quay.io/coreos/etcd:v3.5.5"
     "milvusdb/milvus:v2.4.0"
-    "rustfs/rustfs:latest"
+    "bitnamilegacy/minio:latest"
   )
 fi
 
