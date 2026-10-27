@@ -9,7 +9,7 @@
 | [03 开发规范](./03-development-standards.md) | 目录与命名、风格、分支提交、评审、测试、发布 | 所有贡献者 |
 | [数据与接口契约](./contracts/data-and-interface-contracts.md) | 实体字段、REST/WS 接口、视觉信号、存储隔离、删除矩阵 | 服务端、客户端、测试 |
 | [CONTEXT.md](../CONTEXT.md) | 项目术语表 | 所有人 |
-| [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界） | 开发、评审 |
+| [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界、ADR-0003 MyBatis-Plus 持久化） | 开发、评审 |
 
 ## 文档关系
 

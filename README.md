@@ -11,7 +11,7 @@
 - [技术实现路线](./docs/02-technical-roadmap.md)
 - [开发规范](./docs/03-development-standards.md)
 - [数据与接口契约](./docs/contracts/data-and-interface-contracts.md)
-- [架构决策记录（ADR）](./docs/adr/0001-frontend-react.md)（另见 [ADR-0002 运营检索边界](./docs/adr/0002-operator-search-audit.md)）
+- [架构决策记录（ADR）](./docs/adr/0001-frontend-react.md)（另见 [ADR-0002 运营检索边界](./docs/adr/0002-operator-search-audit.md)、[ADR-0003 MyBatis-Plus 持久化](./docs/adr/0003-mybatis-plus-persistence.md)）
 - [术语表](./CONTEXT.md)
 
 原始愿景文档：[ShenYouChu-Ai-Girlfriend-产品需求文档PRD.docx](./ShenYouChu-Ai-Girlfriend-产品需求文档PRD.docx)（历史参考，不作为实现依据）。
@@ -19,7 +19,7 @@
 ## 已确定的方向
 
 - 桌面端 Electron + React + TypeScript；
-- 核心对话服务 Spring Boot + Java，Gateway/Identity 初期同进程分模块；
+- 核心对话服务 Spring Boot 3.x + Java 17，持久化统一使用 MyBatis-Plus，Gateway/Identity 初期同进程分模块；
 - 媒体与视觉独立部署：WebRTC + Python MediaPipe；
 - 模型先使用云 API，接口可替换，后续支持自托管；
 - 本地 Docker 启动 MySQL、Redis、Milvus、MinIO，后续迁移云服务器；

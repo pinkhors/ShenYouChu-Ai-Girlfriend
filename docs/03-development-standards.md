@@ -82,8 +82,11 @@
 
 ### 3.3 Java
 
-- Java 21；使用 `record` 表达不可变 DTO；
-- 领域层不依赖 Web/持久化框架类型；
+- Java 17（当前运行基线）；使用 `record` 表达不可变 DTO；
+- 领域层不依赖 Web 框架类型；持久化统一走 MyBatis-Plus Mapper（见 [ADR-0003](./adr/0003-mybatis-plus-persistence.md)）；
+- 用户私有数据的 Mapper 方法必须显式包含 `user_id` 与 `deleted_at` 条件，禁止提供无归属条件的查询；
+- 分页使用 MyBatis-Plus 分页插件，逻辑删除用 `@TableLogic`，并发状态用 `@Version`，审计时间由 `MetaObjectHandler` 写入 UTC；
+- 禁止字符串拼接 SQL；XML 中的动态条件使用参数绑定；
 - 依赖注入用构造器注入，不用字段注入；
 - 禁止在事务内调用外部模型 API。
 
@@ -260,7 +263,7 @@
 | 编号 | 问题 | 默认建议 |
 |---|---|---|
 | D-1 | 代码托管平台与 CI | GitHub + Actions；迁移时保持流水线等价 |
-| D-2 | 运行时版本 | Java 21 / Node LTS / Python 3.11，初始化时锁定 |
+| D-2 | 运行时版本 | Java 17（当前环境，Spring Boot 3.x 基线）/ Node LTS / Python 3.11，初始化时锁定 |
 | D-3 | 提交信息语言 | type 用英文，summary 用中文 |
 | D-4 | 分支保护与强制评审 | 主分支禁止直推，至少 1 人评审 |
 | D-5 | 覆盖率门禁阈值 | 核心域行/分支 80%，初始化时写入 CI |

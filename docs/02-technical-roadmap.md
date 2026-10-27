@@ -26,7 +26,7 @@
          ▼                         │ 结构化 VisualSignal
 ┌──────────────────────────────┐   │
 │ Core Conversation Service    │◄──┘
-│（Spring Boot + Java 21）      │
+│（Spring Boot + Java 17）      │
 │ 人设/会话/Turn 状态机         │
 │ Agent 编排（Graph 按需）      │
 │ 记忆检索与异步整理            │
@@ -48,14 +48,15 @@
 |---|---|---|
 | Desktop | Electron + React + TypeScript | 桌面采集与交互，不持有任何后端密钥 |
 | Gateway/Identity | Spring Boot 模块 | 认证与凭证签发；初期与 Core 同进程，接口独立 |
-| Core Conversation | Spring Boot + Java 21 | 对话、记忆、编排、模型适配 |
+| Core Conversation | Spring Boot + Java 17 | 对话、记忆、编排、模型适配 |
 | Media & Vision | WebRTC 服务 + Python worker | 技术栈与资源模型不同，可独立扩容/GPU |
 | Infra | MySQL/Redis/Milvus/MinIO | 通过 Compose 本地启动，接口不因环境变化 |
 
 ### 1.2 选型理由
 
 - **Electron + React + TypeScript**：桌面端调用摄像头/麦克风方便；React 生态成熟，便于吸引全球开源贡献者。该决定见 [ADR-0001](./adr/0001-frontend-react.md)；Vue3 因全球生态与协作面较窄未采用。
-- **Spring Boot + Spring AI Alibaba**：与 PRD 技术栈一致，Graph 支持并行与流式；但首版不依赖复杂 DAG，先用显式编排，出现真实并行收益时再引入。
+- **Spring Boot + Spring AI Alibaba**：与 PRD 技术栈一致，Graph 支持并行与流式；但首版不依赖复杂 DAG，先用显式编排，出现真实并行收益时再引入。运行基线为 Java 17（当前开发环境），需要 21 特性时再统一升级。
+- **MyBatis-Plus（Spring Boot 3.x）**：统一持久化方案，提供条件分页、逻辑删除与乐观锁；用户归属条件必须显式书写，租户插件不作为授权依据。决策见 [ADR-0003](./adr/0003-mybatis-plus-persistence.md)。
 - **MySQL**：权威事实存储，事务成熟。
 - **Redis**：会话实时状态与限流缓存，全部带 TTL；不作为权威事实源。
 - **Milvus**：长期记忆语义检索；P0 可先不启用，接口预留。
