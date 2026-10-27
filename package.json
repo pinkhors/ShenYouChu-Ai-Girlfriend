@@ -8,5 +8,11 @@
     "dev:desktop": "npm run dev --workspace shenyouchu-desktop",
     "build:desktop": "npm run build --workspace shenyouchu-desktop",
     "typecheck:desktop": "npm run typecheck --workspace shenyouchu-desktop"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   }
 }
