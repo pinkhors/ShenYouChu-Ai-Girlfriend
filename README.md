@@ -61,11 +61,19 @@ GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
 
 ```text
 pom.xml                     # 父 POM，聚合 Java 模块
-docker-compose.yaml         # 本地基础设施
+docker-compose.yaml         # 本地基础设施（默认 MySQL/Redis，full profile 含 Milvus/MinIO）
 services/core/              # Spring Boot 核心服务
+apps/desktop/               # Electron + React + TypeScript 桌面端
 docs/                       # PRD、技术路线、开发规范、契约、ADR
+scripts/                    # 镜像拉取与 M0 验证脚本
 ```
 
 ## 状态
 
-M0 进行中：核心服务骨架已通过编译与打包；下一步是启动 Docker 基础设施做一次真实注册/登录/会话隔离联调，然后初始化桌面端。未决问题见各文档的「待确认项」，均给出默认建议，不阻塞开发。
+M0 进行中：
+
+- 核心服务已在本地 MySQL 上完成真实联调：健康检查、注册/登录、会话归属隔离（跨用户 404）、重复注册 409、匿名 401 全部通过，验证脚本见 `scripts/verify-m0.ps1`；
+- 基础设施 Compose 支持默认（MySQL/Redis）与 `full`（Milvus + legacy MinIO）两种 profile；
+- 桌面端骨架正在搭建，完成后可登录并管理会话。
+
+未决问题见各文档的「待确认项」，均给出默认建议，不阻塞开发。
