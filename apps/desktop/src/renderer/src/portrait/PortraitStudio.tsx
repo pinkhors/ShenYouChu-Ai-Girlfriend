@@ -6,6 +6,7 @@ import {
   type PortraitExpression,
   type PortraitSet
 } from './expression'
+import GenerationPanel from './GenerationPanel'
 import { fileToDataUrl } from './image'
 
 interface PortraitStudioProps {
@@ -144,6 +145,8 @@ export default function PortraitStudio({ portraits, onImport, onRemove, onClear 
             {error}
           </p>
         )}
+
+        <GenerationPanel onSave={onImport} />
 
         <div className="slot-grid">
           {PORTRAIT_SLOTS.map((slot) => {

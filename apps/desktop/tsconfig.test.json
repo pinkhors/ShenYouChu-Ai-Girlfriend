@@ -19,6 +19,8 @@
     "src/renderer/src/auth/tokenStore.ts",
     "src/renderer/src/avatar/avatarConfig.ts",
     "src/renderer/src/avatar/avatarStorage.ts",
-    "src/renderer/src/portrait/expression.ts"
+    "src/renderer/src/portrait/expression.ts",
+    "src/renderer/src/portrait/generationConfig.ts",
+    "src/main/imagegen.ts"
   ]
 }

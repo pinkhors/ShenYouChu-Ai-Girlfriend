@@ -124,6 +124,7 @@ export default function App() {
   const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR)
   const [portraits, setPortraits] = useState<PortraitSet | null>(null)
   const [callOpen, setCallOpen] = useState(false)
+  const [chatVersion, setChatVersion] = useState(0)
   const [accountError, setAccountError] = useState<string | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
@@ -439,13 +440,14 @@ export default function App() {
     if (user === null) {
       return false
     }
-    const previous = portraits
-    setPortraits({ ...(previous ?? {}), [slot]: dataUrl })
+    /* 用函数式更新：整组生成时连续写入多个槽位，不能依赖闭包里的旧 portraits */
+    setPortraits((previous) => ({ ...(previous ?? {}), [slot]: dataUrl }))
     try {
       await savePortrait(user.id, slot, dataUrl)
       return true
     } catch {
-      setPortraits(previous)
+      const stored = await loadPortraits(user.id).catch(() => null)
+      setPortraits(stored)
       return false
     }
   }
@@ -454,15 +456,17 @@ export default function App() {
     if (user === null) {
       return false
     }
-    const previous = portraits
-    const next: PortraitSet = { ...(previous ?? {}) }
-    delete next[slot]
-    setPortraits(Object.keys(next).length === 0 ? null : next)
+    setPortraits((previous) => {
+      const next: PortraitSet = { ...(previous ?? {}) }
+      delete next[slot]
+      return Object.keys(next).length === 0 ? null : next
+    })
     try {
       await removePortrait(user.id, slot)
       return true
     } catch {
-      setPortraits(previous)
+      const stored = await loadPortraits(user.id).catch(() => null)
+      setPortraits(stored)
       return false
     }
   }
@@ -471,13 +475,13 @@ export default function App() {
     if (user === null) {
       return false
     }
-    const previous = portraits
     setPortraits(null)
     try {
       await clearPortraits(user.id)
       return true
     } catch {
-      setPortraits(previous)
+      const stored = await loadPortraits(user.id).catch(() => null)
+      setPortraits(stored)
       return false
     }
   }
@@ -670,7 +674,7 @@ export default function App() {
         {section === 'chats' ? (
           activeConversation !== null ? (
             <ChatView
-              key={activeConversation.id}
+              key={`${activeConversation.id}-${chatVersion}`}
               conversation={activeConversation}
               avatar={avatar}
               portraits={portraits}
@@ -721,11 +725,13 @@ export default function App() {
 
       {callOpen && activeConversation !== null && (
         <CallView
+          conversation={activeConversation}
           portraits={portraits}
           config={avatar}
           characterState={characterState}
           onClose={() => {
             setCallOpen(false)
+            setChatVersion((previous) => previous + 1)
           }}
         />
       )}

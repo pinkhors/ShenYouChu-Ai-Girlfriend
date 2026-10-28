@@ -1,5 +1,6 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
+import { generateImage, parseImageRequest } from './imagegen'
 
 /**
  * 主进程入口。
@@ -16,11 +17,17 @@ import { join } from 'node:path'
 const WINDOW_WIDTH = 1280
 const WINDOW_HEIGHT = 800
 
+/* 出图通道：渲染进程只传参数，网络请求与密钥使用都在主进程完成 */
+ipcMain.handle('imagegen:generate', async (_event, payload: unknown): Promise<string> => {
+  const request = parseImageRequest(payload)
+  return generateImage(request)
+})
+
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
-    show: false,
+    show: true,
     autoHideMenuBar: true,
     backgroundColor: '#12131a',
     webPreferences: {
@@ -30,6 +37,14 @@ function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true
     }
+  })
+
+  /* 渲染进程的导航事件打到终端，便于排查 loadURL / loadFile 失败 */
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[desktop] 渲染进程加载完成：', mainWindow.webContents.getURL())
+  })
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('[desktop] 渲染进程加载失败：', { errorCode, errorDescription, validatedURL })
   })
 
   /* 先隐藏、渲染就绪后再显示，避免白屏闪烁 */

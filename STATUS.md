@@ -597,3 +597,16 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 33 passed / 0 failed。
 未验证：Electron 窗口与实际视觉；通话无音频/TTS/逐字口型（仅形象演示）。
+
+## Round 29：AI 出图 + 通话朗读 + 动作（2026-10-28）
+
+- 主进程出图适配 `src/main/imagegen.ts`：ComfyUI 基础 SDXL 工作流（`/prompt` → `/history` → `/view`）与 OpenAI 兼容 `images/generations`；参数校验、http/https 限制、超时与 12MB 上限；
+- IPC `imagegen:generate` + preload 窄桥接：渲染进程不直接跨域，API Key 不进入页面网络层；
+- 形象页「AI 生成」面板：Provider / 地址 / 模型 / Key / 提示词 / 尺寸 / 步数 / CFG / seed；支持单张基础图、整组 7 张逐张写槽位、可停止；
+- 通话页：文字输入 → 后端 SSE 回复 → Web Speech 朗读；口型按 150ms 节奏开合；停止朗读 / 挂断；
+- 动作：点头 / 歪头 / 凑近 CSS 动画；
+- 关闭通话后 `chatVersion` 重挂 ChatView，避免通话中产生的消息不同步；
+- 测试 44 个。
+
+验证：`tsc --noEmit` exit 0；`npm test` 44 passed / 0 failed。
+未验证：真实 ComfyUI/云 API、系统语音与 Electron 窗口；ASR/音素级口型未接。
