@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -102,7 +104,10 @@ public class TurnService {
         return new TurnResponse(turnId, MessageView.from(userMessage), MessageView.from(assistantMessage));
     }
 
-    /** 消息分页：按 id 升序，取 limit+1 判断是否还有下一页。 */
+    /**
+     * 消息分页：默认返回最新一页（按 id 升序返回，界面自上而下时间递增），
+     * 带上上一页的 nextCursor 时继续向更早的消息翻页。
+     */
     @Transactional(readOnly = true)
     public MessagePage messages(Long userId, Long conversationId, int limit, Long cursor) {
         requireOwned(userId, conversationId);
@@ -110,14 +115,17 @@ public class TurnService {
         List<Message> rows = messageMapper.selectList(Wrappers.<Message>lambdaQuery()
                 .eq(Message::getUserId, userId)
                 .eq(Message::getConversationId, conversationId)
-                .gt(cursor != null, Message::getId, cursor)
-                .orderByAsc(Message::getId)
+                .lt(cursor != null, Message::getId, cursor)
+                .orderByDesc(Message::getId)
                 .last("LIMIT " + (safeLimit + 1)));
 
         boolean hasMore = rows.size() > safeLimit;
-        List<Message> page = hasMore ? rows.subList(0, safeLimit) : rows;
+        List<Message> newestFirst = hasMore ? rows.subList(0, safeLimit) : rows;
+        /* 查询按 id 倒序取最新一页，返回前翻正，调用方无需再排序 */
+        List<Message> page = new ArrayList<>(newestFirst);
+        Collections.reverse(page);
         String nextCursor = hasMore && !page.isEmpty()
-                ? String.valueOf(page.get(page.size() - 1).getId())
+                ? String.valueOf(page.get(0).getId())
                 : null;
         return new MessagePage(page.stream().map(MessageView::from).toList(), nextCursor);
     }

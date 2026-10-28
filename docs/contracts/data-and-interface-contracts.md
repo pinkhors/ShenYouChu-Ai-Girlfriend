@@ -288,11 +288,13 @@
 | POST | `/conversations` | 创建会话 |
 | GET | `/conversations/{id}` | 详情（校验归属） |
 | DELETE | `/conversations/{id}` | 删除（逻辑删除，异步物理删除可选） |
-| GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor） |
+| GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100；默认返回最新一页，`cursor` 为上一页 nextCursor，用于继续向更早翻页） |
 | POST | `/conversations/{id}/turns` | 创建轮次（文本输入），返回 turnId |
 | POST | `/conversations/{id}/turns/{turnId}/cancel` | 取消进行中的轮次（仅归属者；未知或已结束返回 404） |
 
 轮次状态与流式输出通过 WebSocket 下发（见第 4 节），不在 REST 中长轮询。
+
+`GET /conversations/{id}/messages` 默认返回**最新一页**，`items` 按时间升序返回（便于聊天界面自上而下渲染）；把 `nextCursor` 作为 `cursor` 传回即向更早的消息翻页。首次进入会话必须先看到最近的对话，历史只能靠翻页补齐。
 
 ### 3.3 记忆
 

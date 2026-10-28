@@ -17,6 +17,8 @@
     "src/renderer/src/api/encoding.ts",
     "src/renderer/src/api/turnStream.ts",
     "src/renderer/src/chat/pendingMessages.ts",
+    "src/renderer/src/chat/pendingHandoff.ts",
+    "src/renderer/src/chat/messagePages.ts",
     "src/renderer/src/auth/tokenStore.ts",
     "src/renderer/src/avatar/avatarConfig.ts",
     "src/renderer/src/avatar/avatarStorage.ts",

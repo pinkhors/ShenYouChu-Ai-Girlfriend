@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   API_BASE,
   ApiError,
@@ -128,6 +128,8 @@ export default function App() {
   const [callOpen, setCallOpen] = useState(false)
   const [chatVersion, setChatVersion] = useState(0)
   const [accountError, setAccountError] = useState<string | null>(null)
+  /* 后台轮次结束时读取“用户当前停在哪个会话”，用 ref 避免闭包里拿到旧值 */
+  const activeConversationIdRef = useRef<string | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
   useEffect(() => {
@@ -220,6 +222,10 @@ export default function App() {
     }
   }, [activeConversation])
 
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversation?.id ?? null
+  }, [activeConversation])
+
   /* 启动时校验本地令牌：失败即视为未登录，不做静默降级 */
   useEffect(() => {
     if (tokenStore.getToken() === null) {
@@ -280,6 +286,20 @@ export default function App() {
     }
     void refreshConversations()
   }, [user, refreshConversations])
+
+  /**
+   * 会话被切走期间完成的轮次：刷新会话列表里的最近消息时间；
+   * 如果用户正停在该会话，就强制重新加载消息，让刚落库的回复出现。
+   */
+  const handleTurnSettled = useCallback(
+    (conversationId: string): void => {
+      void refreshConversations()
+      if (activeConversationIdRef.current === conversationId) {
+        setChatVersion((previous) => previous + 1)
+      }
+    },
+    [refreshConversations]
+  )
 
   /* 首次进入自动选中最近的会话；当前会话被删除时回到空态 */
   useEffect(() => {
@@ -724,7 +744,7 @@ export default function App() {
         {section === 'chats' ? (
           activeConversation !== null ? (
             <ChatView
-              key={`${activeConversation.id}-${chatVersion}`}
+              key={activeConversation.id}
               conversation={activeConversation}
               avatar={avatar}
               portraits={portraits}
@@ -734,6 +754,8 @@ export default function App() {
               onCall={() => {
                 setCallOpen(true)
               }}
+              onTurnSettled={handleTurnSettled}
+              reloadToken={chatVersion}
             />
           ) : (
             <EmptyChat

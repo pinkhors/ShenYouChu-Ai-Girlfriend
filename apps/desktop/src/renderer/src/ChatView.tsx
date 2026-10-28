@@ -9,6 +9,8 @@ import {
   type Message
 } from './api/client'
 import type { AvatarConfig } from './avatar/avatarConfig'
+import { prependOlderMessages } from './chat/messagePages'
+import { dropHandoffMessage, handoffPendingMessages, takePendingMessages } from './chat/pendingHandoff'
 import {
   createPendingUserMessage,
   newestMessageId,
@@ -29,6 +31,10 @@ interface ChatViewProps {
   readonly characterState: CharacterState | null
   readonly userName: string
   readonly onCall: () => void
+  /** 后台轮次落库后的通知：让应用层刷新会话列表，并按需重新加载当前会话 */
+  readonly onTurnSettled: (conversationId: string) => void
+  /** 外部要求重新拉取消息的版本号；变化即回源，不重建组件（保留输入框内容） */
+  readonly reloadToken: number
 }
 
 const SUGGESTIONS = ['今天有点累，想和你说说话', '你还记得我喜欢什么吗？', '给我讲个睡前故事吧']
@@ -55,7 +61,9 @@ export default function ChatView({
   heroImage,
   characterState,
   userName,
-  onCall
+  onCall,
+  onTurnSettled,
+  reloadToken
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [pending, setPending] = useState<PendingUserMessage[]>([])
@@ -70,6 +78,19 @@ export default function ChatView({
   const activeTurnIdRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const mountedRef = useRef(true)
+  const isSendingRef = useRef(false)
+  const pendingRef = useRef<PendingUserMessage[]>(pending)
+  const onTurnSettledRef = useRef(onTurnSettled)
+  const stickToBottomRef = useRef(true)
+
+  useEffect(() => {
+    onTurnSettledRef.current = onTurnSettled
+  }, [onTurnSettled])
+
+  useEffect(() => {
+    pendingRef.current = pending
+  }, [pending])
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -88,15 +109,35 @@ export default function ChatView({
   }, [conversation.id])
 
   useEffect(() => {
-    /* 切换会话时丢弃上一个会话的本地占位消息 */
-    setPending([])
     void load()
-    return () => {
-      abortRef.current?.abort()
+  }, [load, reloadToken])
+
+  /*
+   * 切走会话时界面会卸载，但本轮 SSE 不中断：服务端仍在生成并最终落库，
+   * 结束时用 onTurnSettled 通知应用层刷新。卸载前把尚未落库的占位消息交接出去，
+   * 下次进入该会话时先展示，避免“最近的几条消息看不见”。
+   */
+  useEffect(() => {
+    /* 上一次切走时还没等到回复：先把占位消息补回来（取走后即清空，重复执行是幂等的） */
+    const handedOff = takePendingMessages(conversation.id)
+    if (handedOff.length > 0) {
+      setPending((previous) => [...handedOff, ...previous])
     }
-  }, [load])
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (isSendingRef.current) {
+        handoffPendingMessages(conversation.id, pendingRef.current)
+      }
+    }
+  }, [conversation.id])
 
   useEffect(() => {
+    if (!stickToBottomRef.current) {
+      /* 正在向上翻更早的消息，不要被拉回底部 */
+      stickToBottomRef.current = true
+      return
+    }
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, pending, streamingText, isSending])
 
@@ -107,10 +148,9 @@ export default function ChatView({
     setIsLoadingMore(true)
     try {
       const page = await listMessages(conversation.id, 20, nextCursor)
-      setMessages((previous) => {
-        const seen = new Set(previous.map((item) => item.id))
-        return [...previous, ...page.items.filter((item) => !seen.has(item.id))]
-      })
+      /* 更早的消息接在顶部，保持时间顺序；此时不要把视图拉回底部 */
+      stickToBottomRef.current = false
+      setMessages((previous) => prependOlderMessages(previous, page.items))
       setPending((previous) => reconcilePending(previous, page.items))
       setNextCursor(page.nextCursor)
     } catch (loadError) {
@@ -131,8 +171,21 @@ export default function ChatView({
     setError(null)
     setStreamingText('')
     setIsSending(true)
+    isSendingRef.current = true
     /* 先本地占位：不等服务端落库，用户消息立刻出现在会话里 */
     setPending((previous) => [...previous, pendingMessage])
+
+    /**
+     * 本轮结束后的收尾：仍在本会话就回源对齐；
+     * 已经切走（组件卸载）则交给应用层刷新会话列表和当前视图。
+     */
+    const settle = (): void => {
+      if (mountedRef.current) {
+        void load()
+        return
+      }
+      onTurnSettledRef.current(conversation.id)
+    }
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -152,7 +205,7 @@ export default function ChatView({
           },
           onCompleted: () => {
             activeTurnIdRef.current = null
-            void load()
+            settle()
           }
         },
         controller.signal
@@ -160,17 +213,19 @@ export default function ChatView({
     } catch (sendError) {
       if (sendError instanceof DOMException && sendError.name === 'AbortError') {
         /* 用户主动停止：服务端可能已落库，回源对齐 */
-        void load()
+        settle()
       } else {
         setError(toMessage(sendError))
         if (!started) {
           /* 尚未落库：撤回占位消息并把文本放回输入框，便于重发 */
           setPending((previous) => previous.filter((item) => item.localId !== pendingMessage.localId))
+          dropHandoffMessage(conversation.id, pendingMessage.localId)
           setDraft((current) => (current === '' ? text : current))
         }
-        void load()
+        settle()
       }
     } finally {
+      isSendingRef.current = false
       setIsSending(false)
       setStreamingText('')
       activeTurnIdRef.current = null
