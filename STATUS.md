@@ -90,3 +90,19 @@ pnpm --filter shenyouchu-desktop dev
 3. 活动事件查询接口 `GET /api/v1/activity-events`；
 4. 扩展验收脚本覆盖消息与隔离；
 5. 流式输出（SSE/WS）随后接入。
+
+## Round 2 进展（2026-10-28）
+
+已实现并验证：
+
+- 消息与轮次：`POST /api/v1/conversations/{id}/turns`、`GET /api/v1/conversations/{id}/messages`，消息按 `userId + conversationId` 归属过滤，越权返回 404；
+- 人设加载：`PersonaService` 从 `characters.persona_config` 组装系统提示词；
+- 回复生成 seam：`ReplyGenerator` 接口 + `SimplePersonaReplyGenerator` 确定性占位实现（不调用外部模型，保证链路可验收）；
+- 活动记录查询：`GET /api/v1/activity-events?type=&limit=`，仅返回本人事件；
+- 验证：`mvn -DskipTests package` 通过；`SimplePersonaReplyGeneratorTest` 通过。
+
+下一轮：
+
+1. 基础记忆：`memories` 实体/接口、轮次结束后的异步整理（先确定性实现，后接 LLM）；
+2. 流式输出：SSE 或 WebSocket 按契约下发 `turn.*` 事件；
+3. 扩展 `scripts/verify-m0.ps1` 覆盖消息、记忆、活动事件与越权。
