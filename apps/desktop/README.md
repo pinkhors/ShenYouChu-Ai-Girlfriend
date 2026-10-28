@@ -11,23 +11,24 @@ Electron + React + TypeScript 桌面骨架。当前为 **M0：登录 + 会话增
 curl http://127.0.0.1:48080/api/v1/auth/me   # 返回 401 即表示服务已在运行
 ```
 
-Node.js 20+ 与 npm（本仓库为 npm workspaces，仅包含 `apps/*`）。
+Node.js 20+ 与 npm。前端依赖只安装在 `apps/desktop/node_modules`，与后端 `services/core` 完全独立。
 
 ## 安装与运行
 
 ```bash
-# 1) 在仓库根安装 workspace 依赖（只装一次）
+cd apps/desktop
+
+# 1) 安装依赖（只装一次，只影响 apps/desktop/node_modules）
 npm install
 
 # 2) 开发模式（热更新，自动拉起 Electron）
-npm run dev --workspace shenyouchu-desktop
-# 等价于：cd apps/desktop && npm run dev
+npm run dev
 
 # 3) 类型检查（严格模式，noUnusedLocals/noUnusedParameters 已开启）
-npm run typecheck --workspace shenyouchu-desktop
+npm run typecheck
 
 # 4) 生产构建（产物在 apps/desktop/out/{main,preload,renderer}）
-npm run build --workspace shenyouchu-desktop
+npm run build
 ```
 
 > npm 默认执行依赖的 postinstall。若 Electron 二进制下载失败，设置 `ELECTRON_MIRROR` 后重新执行 `npm install`。
@@ -44,10 +45,10 @@ npm run build --workspace shenyouchu-desktop
 
 ```bash
 # Windows PowerShell
-$env:VITE_API_BASE_URL = "http://192.168.1.10:48080"; npm run dev --workspace shenyouchu-desktop
+$env:VITE_API_BASE_URL = "http://192.168.1.10:48080"; npm run dev
 
 # bash
-VITE_API_BASE_URL=http://192.168.1.10:48080 npm run dev --workspace shenyouchu-desktop
+VITE_API_BASE_URL=http://192.168.1.10:48080 npm run dev
 ```
 
 也可以写入 `apps/desktop/.env.local`（`VITE_API_BASE_URL=...`）。electron-vite 把渲染进程的 `envDir` 默认设为**项目根目录**，即与 `electron.vite.config.ts` 同级，因此 `.env*` 应放在 `apps/desktop/` 下；只有 `VITE_` / `RENDERER_VITE_` 前缀的变量会暴露给渲染进程。注意 `.env` 文件只作用于渲染进程的 `import.meta.env`，预加载脚本读的是真实进程环境变量，所以上面的方式 2 仅对进程环境变量生效。
