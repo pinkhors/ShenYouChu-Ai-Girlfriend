@@ -328,3 +328,17 @@ character-state：mood 53、intimacy 2
 或唯一索引改为 `(username, deleted_at)`，列入待确认项。
 
 下一轮：桌面端「删除账号」入口与二次确认；派生存储清理端口的真实实现（Redis 会话清理优先）。
+
+## Round 15 进展（2026-10-28）
+
+新增并落地：
+
+- 用户新增规则：**所有 Markdown 文档必须使用 UTF-8 编码写入**；
+  - 写入 [AGENTS.md](AGENTS.md)（面向代理与贡献者的协作规则，含编码、工作区边界、验证要求、沙箱限制）；
+  - 同步到 `docs/03-development-standards.md` §1 目录约束；
+- 桌面端「删除账号」：顶栏新增红色按钮 + 二次确认，调用 `POST /api/v1/account/deletion`，
+  成功后清除本地 token、关系状态与会话列表并回到登录页；
+- 验证：`apps/desktop` 下 `tsc --noEmit` exit 0。
+
+下一轮：`AccountPurgePort` 的 Redis 会话清理实现（需引入 spring-boot-starter-data-redis），
+以及 README 里程碑状态收尾。

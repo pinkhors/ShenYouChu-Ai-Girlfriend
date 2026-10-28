@@ -3,6 +3,7 @@ import {
   API_BASE,
   ApiError,
   createConversation,
+  deleteAccount,
   deleteConversation,
   getCharacterState,
   listConversations,
@@ -242,6 +243,27 @@ export default function App() {
     }
   }
 
+  const handleDeleteAccount = async (): Promise<void> => {
+    const confirmed = window.confirm(
+      '删除账号会清除你的会话、消息、记忆与关系状态，且无法恢复。确定继续吗？'
+    )
+    if (!confirmed) {
+      return
+    }
+    try {
+      await deleteAccount()
+    } catch (error) {
+      setConversationError(describeError(error, '删除账号失败，请稍后重试'))
+      return
+    }
+    tokenStore.clear()
+    setUser(null)
+    setConversations([])
+    setCharacterState(null)
+    setActiveConversation(null)
+    setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '账号已删除，感谢你的陪伴' })
+  }
+
   const handleNewConversationTitleChange = (event: ChangeEvent<HTMLInputElement>): void => {
     setNewConversationTitle(event.target.value)
   }
@@ -441,6 +463,15 @@ export default function App() {
             }}
           >
             退出登录
+          </button>
+          <button
+            className="button button--danger"
+            type="button"
+            onClick={() => {
+              void handleDeleteAccount()
+            }}
+          >
+            删除账号
           </button>
         </div>
       </header>

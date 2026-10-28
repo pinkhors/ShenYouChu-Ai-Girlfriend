@@ -34,6 +34,7 @@
 约束：
 
 - 业务代码不放在仓库根目录；
+- **所有 Markdown 文档必须使用 UTF-8 编码写入**，禁止 GBK/ANSI；优先使用文件工具编辑，避免用 PowerShell 默认编码整篇重写；
 - 前端依赖必须收敛在各自包内：`package.json`、锁文件、`node_modules`、pnpm store/npm cache 只允许出现在 `apps/desktop`（或未来的 `apps/*`）之下，仓库根不得创建任何 JS 包管理文件；
 - 临时脚本、抓取数据、模型权重、录像样本不入库；
 - 真实密钥只存在于本地 `.env` 或部署密钥管理，仓库只提交 `.env.example`；

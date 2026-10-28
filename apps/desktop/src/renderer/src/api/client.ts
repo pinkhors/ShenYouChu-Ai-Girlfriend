@@ -417,3 +417,8 @@ export interface CharacterState {
 export function getCharacterState(): Promise<CharacterState> {
   return request<CharacterState>('/character-state')
 }
+
+/** 删除当前账号：服务端级联清理，返回后本地凭证必须立即清除。 */
+export function deleteAccount(): Promise<void> {
+  return request<void>('/account/deletion', { method: 'POST' })
+}
