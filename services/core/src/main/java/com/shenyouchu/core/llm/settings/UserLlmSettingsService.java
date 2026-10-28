@@ -144,8 +144,9 @@ public class UserLlmSettingsService {
 
         long startedAt = System.nanoTime();
         try {
-            httpClient.complete(config, "你是一个简洁的助手。", "只回复：连接成功",
-                    Math.min(config.maxTokens(), 32));
+            /* 推理型模型会先消耗 reasoning token；测试请求给 32 可能直接得到空 content */
+            int testTokens = Math.min(Math.max(config.maxTokens(), 128), 256);
+            httpClient.complete(config, "你是一个简洁的助手。", "只回复：连接成功", testTokens);
             long latencyMs = (System.nanoTime() - startedAt) / 1_000_000;
             return new LlmTestResult(true, latencyMs, config.model(), null);
         } catch (Exception ex) {

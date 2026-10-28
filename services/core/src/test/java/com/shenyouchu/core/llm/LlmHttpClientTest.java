@@ -1,5 +1,7 @@
 package com.shenyouchu.core.llm;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,6 +10,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class LlmHttpClientTest {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     @SuppressWarnings("unchecked")
@@ -22,5 +26,16 @@ class LlmHttpClientTest {
         assertThat(messages).hasSize(2);
         assertThat(messages.get(0)).containsEntry("role", "system").containsEntry("content", "SYSTEM");
         assertThat(messages.get(1)).containsEntry("role", "user").containsEntry("content", "USER");
+    }
+
+    @Test
+    void textOfHandlesStringAndMultimodalArray() throws Exception {
+        JsonNode stringNode = objectMapper.readTree("\"连接成功\"");
+        JsonNode arrayNode = objectMapper.readTree("[{\"type\":\"text\",\"text\":\"连接\"},{\"type\":\"text\",\"text\":\"成功\"}]");
+
+        assertThat(LlmHttpClient.textOf(stringNode)).isEqualTo("连接成功");
+        assertThat(LlmHttpClient.textOf(arrayNode)).isEqualTo("连接成功");
+        assertThat(LlmHttpClient.textOf(null)).isEmpty();
+        assertThat(LlmHttpClient.textOf(objectMapper.readTree("null"))).isEmpty();
     }
 }

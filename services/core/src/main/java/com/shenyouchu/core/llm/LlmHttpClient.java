@@ -47,12 +47,59 @@ public class LlmHttpClient {
                 .retrieve()
                 .body(JsonNode.class);
 
-        String content = response == null ? null
-                : response.path("choices").path(0).path("message").path("content").asText(null);
-        if (content == null || content.isBlank()) {
-            throw new IllegalStateException("LLM 返回了空内容");
+        if (response == null) {
+            throw new IllegalStateException("LLM 返回了空响应");
+        }
+        JsonNode error = response.path("error");
+        if (!error.isMissingNode() && !error.isNull()) {
+            String message = error.path("message").asText("");
+            throw new IllegalStateException("LLM 返回错误：" + (message.isBlank() ? snippet(response) : message));
+        }
+        JsonNode choices = response.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
+            throw new IllegalStateException("LLM 响应缺少 choices：" + snippet(response));
+        }
+        JsonNode choice = choices.get(0);
+        JsonNode message = choice.path("message");
+        String content = textOf(message.get("content"));
+        if (content.isBlank()) {
+            JsonNode reasoning = message.has("reasoning") ? message.get("reasoning") : message.get("reasoning_content");
+            String detail = "LLM 返回了空内容（finish_reason="
+                    + choice.path("finish_reason").asText("unknown")
+                    + "，reasoning=" + textOf(reasoning).length() + " chars）："
+                    + snippet(response);
+            throw new IllegalStateException(detail);
         }
         return content.trim();
+    }
+
+    /**
+     * 兼容字符串、数组（多模态 text parts）与缺失字段。
+     */
+    static String textOf(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isArray()) {
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode item : node) {
+                if (item.isTextual()) {
+                    builder.append(item.asText());
+                } else if (item.has("text")) {
+                    builder.append(item.path("text").asText(""));
+                }
+            }
+            return builder.toString();
+        }
+        return node.asText("");
+    }
+
+    private static String snippet(JsonNode response) {
+        String text = response.toString();
+        return text.length() > 300 ? text.substring(0, 300) + "…" : text;
     }
 
     /** 请求体保持最小字段，便于测试与不同供应商兼容。 */
