@@ -260,7 +260,7 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/conversations` | 当前用户会话列表（cursor 分页） |
+| GET | `/conversations` | 当前用户会话分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor） |
 | POST | `/conversations` | 创建会话 |
 | GET | `/conversations/{id}` | 详情（校验归属） |
 | DELETE | `/conversations/{id}` | 删除（逻辑删除，异步物理删除可选） |

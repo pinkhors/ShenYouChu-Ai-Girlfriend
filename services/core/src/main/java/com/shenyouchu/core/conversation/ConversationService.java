@@ -5,6 +5,7 @@ import com.shenyouchu.core.activity.ActivityService;
 import com.shenyouchu.core.character.CharacterProfile;
 import com.shenyouchu.core.character.mapper.CharacterMapper;
 import com.shenyouchu.core.common.ApiException;
+import com.shenyouchu.core.conversation.dto.ConversationPage;
 import com.shenyouchu.core.conversation.dto.ConversationView;
 import com.shenyouchu.core.conversation.dto.CreateConversationRequest;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
@@ -41,14 +42,22 @@ public class ConversationService {
         this.memoryMapper = memoryMapper;
     }
 
+    /** 会话分页：按 id 降序（最新在前），取 limit+1 判断是否还有下一页。 */
     @Transactional(readOnly = true)
-    public List<ConversationView> list(Long userId) {
-        return conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
-                        .eq(Conversation::getUserId, userId)
-                        .orderByDesc(Conversation::getCreatedAt))
-                .stream()
-                .map(ConversationView::from)
-                .toList();
+    public ConversationPage list(Long userId, int limit, Long cursor) {
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+        List<Conversation> rows = conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
+                .eq(Conversation::getUserId, userId)
+                .lt(cursor != null, Conversation::getId, cursor)
+                .orderByDesc(Conversation::getId)
+                .last("LIMIT " + (safeLimit + 1)));
+
+        boolean hasMore = rows.size() > safeLimit;
+        List<Conversation> page = hasMore ? rows.subList(0, safeLimit) : rows;
+        String nextCursor = hasMore && !page.isEmpty()
+                ? String.valueOf(page.get(page.size() - 1).getId())
+                : null;
+        return new ConversationPage(page.stream().map(ConversationView::from).toList(), nextCursor);
     }
 
     @Transactional

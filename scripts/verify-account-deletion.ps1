@@ -5,7 +5,7 @@ param([string]$BaseUrl = "http://127.0.0.1:48080")
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$suffix = Get-Date -Format "HHmmss"
+$suffix = (Get-Date -Format "HHmmssfff") + (Get-Random -Minimum 10 -Maximum 99)
 $password = "password123"
 
 function Status-Code($err) {
@@ -68,4 +68,5 @@ try {
 
 Write-Host ""
 Write-Host "account deletion verification finished."
+
 

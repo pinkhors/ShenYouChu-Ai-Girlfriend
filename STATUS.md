@@ -506,3 +506,29 @@ node --test           18 passed / 0 failed
 验证：`tsc --noEmit` exit 0；`npm test` 18 passed / 0 failed；`mvn package` 此前 BUILD SUCCESS。
 
 下一轮：最后核对 README/验收清单与待确认项，准备里程碑收尾总结。
+
+## Round 26 进展（2026-10-28）
+
+已实现并验证：
+
+- 会话列表 cursor 分页：`GET /api/v1/conversations?limit=&cursor=` 返回 `{items, nextCursor}`，
+  按 id 降序（最新在前），契约与实现彻底收敛（此前是唯一剩余的接口不一致项）；
+- 桌面端 `listConversations` 改为分页信封，App 取 `items`；
+- 验收脚本：`verify-m0.ps1` 增加会话分页信封检查；4 个脚本的用户名后缀改为
+  毫秒+随机数，修复同一秒连续执行导致的重复注册 409；
+- 脚本改为按 UTF-8 正确读写（此前 PS5.1 默认 ANSI 读取）。
+
+真实验收：`scripts/demo.ps1` 四步全部通过：
+
+```text
+M0：health / 隔离 404 / 会话分页信封 / 重复注册 409 / 匿名 401
+M1：消息分页（两页 id 不同）/ 幂等同 turnId / 记忆 / 活动 9 条 /
+    SSE completed / 取消 404 / 关系 mood 53 intimacy 3 / 级联删除 0 残留
+M2：语音占位 / 非法 Base64 400 / 越权 404 / 匿名 401
+账号删除：204 / 旧 token 401 / 删除后登录 401
+DEMO VERIFICATION PASSED: all 4 steps
+```
+
+前端：`tsc --noEmit` exit 0；`npm test` 18 passed / 0 failed。后端：8 个测试类通过；`mvn package` BUILD SUCCESS。
+
+按用户要求：本轮结束后停止 AI 启动的所有服务，由用户自行启动前后端进行手动测试。

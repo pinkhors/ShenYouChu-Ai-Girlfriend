@@ -1,11 +1,11 @@
-# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
+﻿# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/verify-m1.ps1
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$suffix = Get-Date -Format "HHmmss"
+$suffix = (Get-Date -Format "HHmmssfff") + (Get-Random -Minimum 10 -Maximum 99)
 $password = "password123"
 
 function Status-Code($err) {
@@ -176,5 +176,6 @@ try {
 
 Write-Host ""
 Write-Host "M1 verification finished."
+
 
 

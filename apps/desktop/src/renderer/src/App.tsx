@@ -170,7 +170,8 @@ export default function App() {
     setIsLoadingConversations(true)
     setConversationError(null)
     try {
-      setConversations(await listConversations())
+      const page = await listConversations()
+      setConversations(page.items)
     } catch (error) {
       setConversationError(describeError(error, '会话列表加载失败'))
     } finally {

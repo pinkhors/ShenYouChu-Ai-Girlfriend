@@ -1,5 +1,6 @@
 package com.shenyouchu.core.conversation;
 
+import com.shenyouchu.core.conversation.dto.ConversationPage;
 import com.shenyouchu.core.conversation.dto.ConversationView;
 import com.shenyouchu.core.conversation.dto.CreateConversationRequest;
 import com.shenyouchu.core.security.CurrentUser;
@@ -11,10 +12,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/conversations")
@@ -26,9 +26,11 @@ public class ConversationController {
         this.conversationService = conversationService;
     }
 
+    /** 会话分页：按 id 降序（最新在前），cursor 为上一页 nextCursor。 */
     @GetMapping
-    public List<ConversationView> list() {
-        return conversationService.list(CurrentUser.require().userId());
+    public ConversationPage list(@RequestParam(defaultValue = "20") int limit,
+                                 @RequestParam(required = false) Long cursor) {
+        return conversationService.list(CurrentUser.require().userId(), limit, cursor);
     }
 
     @PostMapping

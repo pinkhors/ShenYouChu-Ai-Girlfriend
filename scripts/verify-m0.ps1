@@ -1,9 +1,9 @@
-# M0 verification: register, login token, conversation isolation.
+﻿# M0 verification: register, login token, conversation isolation.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/verify-m0.ps1
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
 $ErrorActionPreference = "Stop"
-$suffix = Get-Date -Format "HHmmss"
+$suffix = (Get-Date -Format "HHmmssfff") + (Get-Random -Minimum 10 -Maximum 99)
 $password = "password123"
 
 function Status-Code($err) {
@@ -48,10 +48,18 @@ try {
 }
 
 Write-Host ""
-Write-Host "==> alice lists her conversations (expect 1)"
+Write-Host "==> alice lists her conversations (expect 1 item)"
 $list = Invoke-RestMethod -Method Get "$BaseUrl/api/v1/conversations" `
     -Headers @{ Authorization = "Bearer $($alice.token)" }
-Write-Host "alice conversation count: $($list.Count)"
+Write-Host "alice conversation count: $($list.items.Count) nextCursor: $($list.nextCursor)"
+
+Write-Host ""
+Write-Host "==> conversation pagination envelope (limit=1)"
+$listOne = Invoke-RestMethod -Method Get "$BaseUrl/api/v1/conversations?limit=1" `
+    -Headers @{ Authorization = "Bearer $($alice.token)" }
+Write-Host "page size: $($listOne.items.Count) nextCursor: $($listOne.nextCursor)"
+if ($listOne.items.Count -ne 1) { Write-Host "FAIL: conversations envelope not working"; exit 1 }
+Write-Host "OK: conversations cursor pagination envelope works"
 
 Write-Host ""
 Write-Host "==> duplicate register (expect 409)"
@@ -73,3 +81,4 @@ try {
 
 Write-Host ""
 Write-Host "verification finished."
+

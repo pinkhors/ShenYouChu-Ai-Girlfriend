@@ -195,8 +195,18 @@ export function me(): Promise<UserView> {
  * 契约文档 3.2 记为 cursor 分页，但当前后端 ConversationController 直接返回数组
  * （List<ConversationView>）；此处按既有实现对接，后端改为分页信封时同步调整。
  */
-export function listConversations(): Promise<Conversation[]> {
-  return request<Conversation[]>('/conversations')
+export interface ConversationPage {
+  readonly items: Conversation[]
+  readonly nextCursor: string | null
+}
+
+/** 会话分页：默认第一页 20 条（最新在前）。 */
+export function listConversations(limit = 20, cursor?: string): Promise<ConversationPage> {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (cursor !== undefined && cursor !== '') {
+    query.set('cursor', cursor)
+  }
+  return request<ConversationPage>(`/conversations?${query.toString()}`)
 }
 
 export function createConversation(input: CreateConversationInput = {}): Promise<Conversation> {
