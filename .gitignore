@@ -53,3 +53,6 @@ recordings/
 .corepack/
 .pnpm-store/
 pnpm-lock.yaml
+
+# TypeScript 测试编译产物（前端纯逻辑测试）
+out-tsc/

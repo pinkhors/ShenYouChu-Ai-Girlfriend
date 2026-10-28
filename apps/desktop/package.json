@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node scripts/prepare-cjs.mjs && node --test --test-isolation=none out-tsc/tests/sse.test.js out-tsc/tests/encoding.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",

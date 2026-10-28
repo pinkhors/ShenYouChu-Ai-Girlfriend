@@ -452,3 +452,20 @@ DEMO VERIFICATION PASSED: all 4 steps
 8 个测试类通过（含 S3 集成测试）；`mvn package` BUILD SUCCESS；桌面端 `tsc --noEmit` exit 0。
 
 下一轮：Milvus 向量清理端口（P2 依赖 Milvus 接入后）；或 README/验收清单最终收尾。
+
+## Round 22 进展（2026-10-28）
+
+已实现并验证：
+
+- 前端可测试性重构：把 SSE 帧解析抽到 `api/sse.ts`、Base64 编解码抽到 `api/encoding.ts`，
+  `client.ts` 只保留请求封装；
+- **前端自动化测试**（不依赖 Electron/esbuild）：`apps/desktop/tests/*.test.ts`，
+  用 `tsc -p tsconfig.test.json` 编译到 `out-tsc/`，写入 `{"type":"commonjs"}` 标记后用
+  `node --test` 运行；
+- 覆盖 9 个用例：SSE 事件/多行 data/无 data 帧/JSON 字段/非法 JSON 容错、
+  UTF-8 Base64 中文与 emoji 往返、空串；
+- `npm test` 脚本与 `apps/desktop/README.md`、验收清单同步说明；`out-tsc/` 加入 .gitignore。
+
+验证：`tsc --noEmit` exit 0；`tsc -p tsconfig.test.json` exit 0；`node --test` **9 passed / 0 failed**。
+
+下一轮：Milvus 向量清理端口（P2）或 README 最终收尾核对。

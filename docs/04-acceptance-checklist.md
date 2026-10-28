@@ -72,9 +72,12 @@ powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
 cd apps\desktop
 npm install
 npm run typecheck
+npm test
 npm run build
 npm run dev
 ```
+
+> `npm test` 使用 tsc + Node 内置测试运行器，不需要 Electron 二进制；`build`/`dev` 需要完整安装。
 
 ## 五、结论
 

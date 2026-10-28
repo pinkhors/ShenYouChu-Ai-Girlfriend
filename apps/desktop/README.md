@@ -55,6 +55,24 @@ VITE_API_BASE_URL=http://192.168.1.10:48080 npm run dev
 
 当前生效的后端地址会显示在界面顶栏，便于排障。
 
+## 前端纯逻辑测试
+
+不需要 Electron 或 esbuild，直接用 TypeScript 编译器 + Node 内置测试运行器：
+
+```cmd
+cd apps\desktop
+npm test
+```
+
+覆盖内容：
+
+- SSE 帧解析（`event:` / `data:` 多行、无 data 帧、JSON 字段提取、非法 JSON 容错）；
+- UTF-8 Base64 编解码（中文、emoji、空串，与 Node `Buffer` 结果对齐）。
+
+原理：`tsc -p tsconfig.test.json` 编译到 `out-tsc/`，脚本在其中写入 `{"type":"commonjs"}`
+标记（因为包本身是 `"type": "module"`），再用 `node --test` 运行。因此这些测试在受限环境
+（无法运行 Electron/构建脚本）下也能执行。
+
 ## 目录结构
 
 ```text

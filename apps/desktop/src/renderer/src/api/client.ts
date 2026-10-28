@@ -1,4 +1,7 @@
 import { getToken } from '../auth/tokenStore'
+import { parseFrame, readPayloadField } from './sse'
+
+export { textToBase64, base64ToText } from './encoding'
 
 /**
  * 后端 REST 客户端（前缀 /api/v1，见 docs/contracts/data-and-interface-contracts.md 第 3 节）。
@@ -245,34 +248,6 @@ export interface TurnStreamHandlers {
   readonly onCompleted?: (turnId: string, messageId: string) => void
 }
 
-function parseFrame(frame: string): { event: string; data: string } | null {
-  let event = 'message'
-  const dataLines: string[] = []
-  for (const line of frame.split('\n')) {
-    if (line.startsWith('event:')) {
-      event = line.slice('event:'.length).trim()
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice('data:'.length).trim())
-    }
-  }
-  if (dataLines.length === 0) {
-    return null
-  }
-  return { event, data: dataLines.join('\n') }
-}
-
-function readPayloadField(data: string, key: string): string | undefined {
-  try {
-    const payload: unknown = JSON.parse(data)
-    if (isRecord(payload)) {
-      return readString(payload, key)
-    }
-  } catch {
-    /* 忽略无法解析的帧，保持流不中断 */
-  }
-  return undefined
-}
-
 /**
  * SSE 流式轮次：解析后端 turn.started / assistant.text.delta / turn.completed。
  * 使用 fetch + ReadableStream 而非 EventSource，因为需要 POST 请求体与 Authorization 头。
@@ -390,16 +365,6 @@ export interface VoiceTurnResponse {
   readonly assistantMessage: Message
   readonly ttsAudioBase64: string
   readonly ttsFormat: string
-}
-
-/** UTF-8 文本转 Base64；M2 占位语音链路用它替代真实音频字节。 */
-export function textToBase64(text: string): string {
-  const bytes = new TextEncoder().encode(text)
-  let binary = ''
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte)
-  }
-  return btoa(binary)
 }
 
 /** 语音轮次：M2 占位实现接受 text/plain 的 Base64 音频；接入真实模型后协议不变。 */

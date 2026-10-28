@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDir": ".",
+    "outDir": "out-tsc"
+  },
+  "include": [
+    "tests/**/*.ts",
+    "src/renderer/src/api/sse.ts",
+    "src/renderer/src/api/encoding.ts"
+  ]
+}
