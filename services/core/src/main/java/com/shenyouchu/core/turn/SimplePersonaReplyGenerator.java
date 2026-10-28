@@ -1,5 +1,6 @@
 package com.shenyouchu.core.turn;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -7,7 +8,7 @@ import org.springframework.stereotype.Component;
  * 目的是让消息、轮次、活动事件链路可端到端验证；LLM 接入时替换此实现即可。
  */
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "shenyouchu.llm.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnProperty(name = "shenyouchu.llm.enabled", havingValue = "false", matchIfMissing = true)
 public class SimplePersonaReplyGenerator implements ReplyGenerator {
 
     @Override
