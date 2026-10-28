@@ -67,8 +67,11 @@ shenyouchu:
     temperature: ${LLM_TEMPERATURE:0.8}
   voice:
     # false 时使用占位 ASR/TTS（音频按 UTF-8 文本解码、TTS 返回 none），保证离线可演示；
-    # 接入 FunASR / CosyVoice 后置为 true 并替换同一接口的实现。
+    # true 时调用 asr-url / tts-url 的外部服务，失败自动回退占位实现。
     enabled: ${VOICE_ENABLED:false}
+    asr-url: ${VOICE_ASR_URL:}
+    tts-url: ${VOICE_TTS_URL:}
+    timeout-seconds: ${VOICE_TIMEOUT_SECONDS:30}
   cors:
     # 桌面端本地开发地址；生产环境改为实际域名
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

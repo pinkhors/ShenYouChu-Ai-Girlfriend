@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { ApiError, listMessages, streamTurn, textToBase64, voiceTurn, type Conversation, type Message } from './api/client'
+import { ApiError, cancelTurn, listMessages, streamTurn, textToBase64, voiceTurn, type Conversation, type Message } from './api/client'
 
 interface ConversationPanelProps {
   readonly conversation: Conversation
@@ -28,6 +28,7 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null)
+  const activeTurnIdRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(async () => {
@@ -70,10 +71,14 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
         conversation.id,
         text,
         {
+          onStarted: (turnId) => {
+            activeTurnIdRef.current = turnId
+          },
           onDelta: (delta) => {
             setStreamingText((previous) => previous + delta)
           },
           onCompleted: () => {
+            activeTurnIdRef.current = null
             void load()
           }
         },
@@ -86,8 +91,21 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
     } finally {
       setIsSending(false)
       setStreamingText('')
+      activeTurnIdRef.current = null
       abortRef.current = null
     }
+  }
+
+  /** 停止生成：通知后端取消本轮，同时中断本地 SSE 连接。 */
+  const handleStop = () => {
+    const turnId = activeTurnIdRef.current
+    abortRef.current?.abort()
+    if (turnId !== null) {
+      void cancelTurn(conversation.id, turnId).catch(() => {
+        /* 轮次可能已自然结束，取消失败不影响界面 */
+      })
+    }
+    setVoiceNotice('已停止本轮生成。')
   }
 
   const handleVoicePlaceholder = async () => {
@@ -178,6 +196,14 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
               onClick={() => void handleVoicePlaceholder()}
             >
               语音（占位）
+            </button>
+            <button
+              className="button button--danger"
+              type="button"
+              disabled={!isSending}
+              onClick={handleStop}
+            >
+              停止生成
             </button>
           </form>
         </section>

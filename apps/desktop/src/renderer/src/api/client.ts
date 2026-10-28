@@ -397,3 +397,11 @@ export function voiceTurn(conversationId: string, audioBase64: string, contentTy
     body: { audioBase64, contentType }
   })
 }
+
+/** 取消进行中的流式轮次（仅归属者；未知或已结束返回 404）。 */
+export function cancelTurn(conversationId: string, turnId: string): Promise<void> {
+  return request<void>(
+    `/conversations/${encodeURIComponent(conversationId)}/turns/${encodeURIComponent(turnId)}/cancel`,
+    { method: 'POST' }
+  )
+}

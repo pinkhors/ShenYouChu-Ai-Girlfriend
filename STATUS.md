@@ -242,3 +242,22 @@ mvn -B spring-boot:run -pl services/core
 说明：M1 为单实例内存实现；多实例部署时替换为 Redis 并保留同一接口（技术路线中的取消广播）。
 
 下一轮：桌面端取消按钮接入 `streamTurn` 中断；M2 真实 ASR/TTS 适配器。
+
+## Round 11 进展（2026-10-28）
+
+已实现并验证：
+
+- 后端 M2 真实适配器骨架：`HttpAsrAdapter` / `HttpTtsAdapter`（OpenAI 风格的简单 JSON 协议，
+  `VOICE_ENABLED=true` 时启用），任何异常/超时/空结果自动回退占位实现；
+- 配置：`VOICE_ASR_URL` / `VOICE_TTS_URL` / `VOICE_TIMEOUT_SECONDS` 写入 `application.yml` 与 `.env.example`；
+- 桌面端：`cancelTurn` 客户端 + 会话详情新增「停止生成」按钮，
+  点击后同时中断本地 SSE（AbortController）并通知后端取消（`POST .../turns/{turnId}/cancel`）；
+- 验证：桌面端 `tsc --noEmit` exit 0；6 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS；
+  真实环境 `verify-m2.ps1` 全部通过（占位链路未回退，说明默认配置仍离线可用）。
+
+适配器协议（自定义包装服务，便于对接 FunASR/CosyVoice）：
+
+- ASR：`POST {VOICE_ASR_URL}` JSON `{audioBase64, contentType}` → `{text, confidence}`
+- TTS：`POST {VOICE_TTS_URL}` JSON `{text, emotion}` → `{audioBase64, format}`
+
+下一轮：把桌面端「停止生成」纳入验收脚本可自动化验证；M0 桌面端本机完整安装指引；准备里程碑收尾。
