@@ -34,8 +34,8 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
   const load = useCallback(async () => {
     setIsLoading(true)
     try {
-      const loaded = await listMessages(conversation.id)
-      setMessages(loaded)
+      const page = await listMessages(conversation.id)
+      setMessages(page.items)
       setError(null)
     } catch (loadError) {
       setError(toMessage(loadError))

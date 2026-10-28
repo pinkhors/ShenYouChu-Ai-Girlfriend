@@ -410,3 +410,28 @@ DEMO VERIFICATION PASSED: all 4 steps
 纯逻辑测试 7 个类通过；`mvn package` BUILD SUCCESS。
 
 下一轮：可选实现对象存储/Milvus 清理端口；或补 M1 消息分页与 `Idempotency-Key`（契约已定义）。
+
+## Round 20 进展（2026-10-28）
+
+已实现并验证：
+
+- 消息 cursor 分页：`GET /api/v1/conversations/{id}/messages?limit=&cursor=` 返回
+  `{items, nextCursor}`（limit 默认 20、最大 100）；桌面端 `listMessages` 改为分页信封；
+- 幂等：`IdempotencyService`（单实例内存，TTL 10 分钟，按用户隔离），
+  `POST /conversations/{id}/turns` 携带 `Idempotency-Key` 时重复请求返回首次结果；
+- 契约更新：消息接口注明分页参数；
+- 验收脚本扩展：`verify-m1.ps1` 新增分页（limit=1 两页 id 不同）与幂等（同 key 同 turnId）检查；
+  `verify-m2.ps1` 适配分页信封。
+
+真实环境验收（`scripts/demo.ps1` 四步全部通过）：
+
+```text
+M1：message count 2 / 分页 limit=1 两页 id 不同 / 幂等同 turnId /
+    记忆 preference / 活动 9 条 / SSE / 取消 404 / 关系 mood 53 intimacy 3 / 级联删除 0 残留
+M0 / M2 / 账号删除 全部 PASSED
+DEMO VERIFICATION PASSED: all 4 steps
+```
+
+测试：7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS；桌面端 `tsc --noEmit` exit 0。
+
+下一轮：可选实现对象存储清理端口（S3 前缀删除），或补 README 的 M1 完整接口说明。

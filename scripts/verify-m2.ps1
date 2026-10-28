@@ -49,9 +49,9 @@ Write-Host "OK: ASR/TTS placeholder pipeline works"
 
 Write-Host ""
 Write-Host "==> messages (expect 2) and memories (expect >= 1)"
-$messages = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages" -Token $alice.token
+$page = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages" -Token $alice.token
 $memories = Invoke-Api -Method Get -Path "/api/v1/memories" -Token $alice.token
-Write-Host "message count: $($messages.Count)  memory count: $($memories.Count)"
+Write-Host "message count: $($page.items.Count)  memory count: $($memories.Count)"
 
 Write-Host ""
 Write-Host "==> invalid base64 (expect 400)"

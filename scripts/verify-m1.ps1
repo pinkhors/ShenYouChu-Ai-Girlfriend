@@ -1,4 +1,4 @@
-﻿# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
+# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/verify-m1.ps1
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
@@ -46,9 +46,40 @@ Write-Host "turnId: $($turn.turnId)"
 Write-Host "assistant: $($turn.assistantMessage.content)"
 
 Write-Host ""
-Write-Host "==> alice messages (expect 2)"
-$messages = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages" -Token $alice.token
-Write-Host "message count: $($messages.Count)"
+Write-Host "==> alice messages (expect 2 items)"
+$page = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages" -Token $alice.token
+$messages = $page.items
+Write-Host "message count: $($messages.Count) nextCursor: $($page.nextCursor)"
+
+Write-Host ""
+Write-Host "==> message pagination (limit=1 expect 1 item and nextCursor)"
+$page1 = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages?limit=1" -Token $alice.token
+Write-Host "page size: $($page1.items.Count) nextCursor: $($page1.nextCursor)"
+if ($page1.items.Count -ne 1 -or [string]::IsNullOrEmpty($page1.nextCursor)) {
+    Write-Host "FAIL: pagination envelope not working"
+    exit 1
+}
+$page2 = Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages?limit=1&cursor=$($page1.nextCursor)" -Token $alice.token
+Write-Host "second page id: $($page2.items[0].id) (expect distinct from first)"
+if ($page2.items[0].id -eq $page1.items[0].id) {
+    Write-Host "FAIL: cursor did not advance"
+    exit 1
+}
+Write-Host "OK: cursor pagination works"
+
+Write-Host ""
+Write-Host "==> idempotency: same Idempotency-Key returns same turn"
+$idemKey = [guid]::NewGuid().ToString()
+$idemHeaders = @{ Authorization = "Bearer $($alice.token)"; "Idempotency-Key" = $idemKey }
+$idemBody = @{ message = "idempotency check" } | ConvertTo-Json -Compress
+$first = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/conversations/$($conv.id)/turns" -Headers $idemHeaders -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($idemBody))
+$second = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/conversations/$($conv.id)/turns" -Headers $idemHeaders -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($idemBody))
+Write-Host "first turnId: $($first.turnId)  second turnId: $($second.turnId)"
+if ($first.turnId -ne $second.turnId) {
+    Write-Host "FAIL: idempotency key did not deduplicate"
+    exit 1
+}
+Write-Host "OK: idempotent replay returns first turn"
 
 Write-Host ""
 Write-Host "==> alice memories (expect >= 1, type preference)"

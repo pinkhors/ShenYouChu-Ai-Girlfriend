@@ -264,7 +264,7 @@
 | POST | `/conversations` | 创建会话 |
 | GET | `/conversations/{id}` | 详情（校验归属） |
 | DELETE | `/conversations/{id}` | 删除（逻辑删除，异步物理删除可选） |
-| GET | `/conversations/{id}/messages` | 消息列表（cursor） |
+| GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor） |
 | POST | `/conversations/{id}/turns` | 创建轮次（文本输入），返回 turnId |
 | POST | `/conversations/{id}/turns/{turnId}/cancel` | 取消进行中的轮次（仅归属者；未知或已结束返回 404） |
 

@@ -7,6 +7,7 @@ import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.MemoryService;
 import com.shenyouchu.core.message.Message;
+import com.shenyouchu.core.message.dto.MessagePage;
 import com.shenyouchu.core.message.dto.MessageView;
 import com.shenyouchu.core.message.mapper.MessageMapper;
 import com.shenyouchu.core.persona.PersonaService;
@@ -81,16 +82,24 @@ public class TurnService {
         return new TurnResponse(turnId, MessageView.from(userMessage), MessageView.from(assistantMessage));
     }
 
+    /** 消息分页：按 id 升序，取 limit+1 判断是否还有下一页。 */
     @Transactional(readOnly = true)
-    public List<MessageView> messages(Long userId, Long conversationId) {
+    public MessagePage messages(Long userId, Long conversationId, int limit, Long cursor) {
         requireOwned(userId, conversationId);
-        return messageMapper.selectList(Wrappers.<Message>lambdaQuery()
-                        .eq(Message::getUserId, userId)
-                        .eq(Message::getConversationId, conversationId)
-                        .orderByAsc(Message::getCreatedAt))
-                .stream()
-                .map(MessageView::from)
-                .toList();
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+        List<Message> rows = messageMapper.selectList(Wrappers.<Message>lambdaQuery()
+                .eq(Message::getUserId, userId)
+                .eq(Message::getConversationId, conversationId)
+                .gt(cursor != null, Message::getId, cursor)
+                .orderByAsc(Message::getId)
+                .last("LIMIT " + (safeLimit + 1)));
+
+        boolean hasMore = rows.size() > safeLimit;
+        List<Message> page = hasMore ? rows.subList(0, safeLimit) : rows;
+        String nextCursor = hasMore && !page.isEmpty()
+                ? String.valueOf(page.get(page.size() - 1).getId())
+                : null;
+        return new MessagePage(page.stream().map(MessageView::from).toList(), nextCursor);
     }
 
     /** 归属校验：查不到或不属于当前用户都返回 404。 */

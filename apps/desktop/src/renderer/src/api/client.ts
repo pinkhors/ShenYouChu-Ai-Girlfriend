@@ -216,8 +216,20 @@ export interface TurnResponse {
   readonly assistantMessage: Message
 }
 
-export function listMessages(conversationId: string): Promise<Message[]> {
-  return request<Message[]>(`/conversations/${encodeURIComponent(conversationId)}/messages`)
+export interface MessagePage {
+  readonly items: Message[]
+  readonly nextCursor: string | null
+}
+
+/** 消息分页：默认第一页 20 条；后续可用 nextCursor 加载更多。 */
+export function listMessages(conversationId: string, limit = 20, cursor?: string): Promise<MessagePage> {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (cursor !== undefined && cursor !== '') {
+    query.set('cursor', cursor)
+  }
+  return request<MessagePage>(
+    `/conversations/${encodeURIComponent(conversationId)}/messages?${query.toString()}`
+  )
 }
 
 export function sendTurn(conversationId: string, message: string): Promise<TurnResponse> {
