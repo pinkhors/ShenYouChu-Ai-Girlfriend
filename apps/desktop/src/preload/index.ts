@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AsrRequest } from '../main/asr'
 import type { ImageGenerationRequest } from '../main/imagegen'
+import type { TtsRequest } from '../main/tts'
 
 /**
  * 预加载脚本：只向渲染进程暴露非敏感的宿主信息与一个受控的出图通道。
@@ -19,6 +21,12 @@ export interface DesktopBridge {
   readonly imagegen: {
     generate(request: ImageGenerationRequest): Promise<string>
   }
+  readonly tts: {
+    synthesize(request: TtsRequest): Promise<string>
+  }
+  readonly asr: {
+    transcribe(request: AsrRequest): Promise<string>
+  }
 }
 
 /** 优先取进程环境变量，便于指向局域网或远端后端；缺失时回落到本地默认地址。 */
@@ -36,6 +44,14 @@ const bridge: DesktopBridge = Object.freeze({
   imagegen: Object.freeze({
     generate: (request: ImageGenerationRequest): Promise<string> =>
       ipcRenderer.invoke('imagegen:generate', request) as Promise<string>
+  }),
+  tts: Object.freeze({
+    synthesize: (request: TtsRequest): Promise<string> =>
+      ipcRenderer.invoke('tts:synthesize', request) as Promise<string>
+  }),
+  asr: Object.freeze({
+    transcribe: (request: AsrRequest): Promise<string> =>
+      ipcRenderer.invoke('asr:transcribe', request) as Promise<string>
   })
 })
 

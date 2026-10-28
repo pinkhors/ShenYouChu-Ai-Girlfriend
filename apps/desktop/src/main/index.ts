@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'node:path'
+import { parseAsrRequest, transcribe } from './asr'
 import { generateImage, parseImageRequest } from './imagegen'
+import { parseTtsRequest, synthesize } from './tts'
 
 /**
  * 主进程入口。
@@ -22,6 +24,25 @@ ipcMain.handle('imagegen:generate', async (_event, payload: unknown): Promise<st
   const request = parseImageRequest(payload)
   return generateImage(request)
 })
+
+/* 语音合成与识别：同样只在主进程发起网络请求 */
+ipcMain.handle('tts:synthesize', async (_event, payload: unknown): Promise<string> => {
+  const request = parseTtsRequest(payload)
+  return synthesize(request)
+})
+
+ipcMain.handle('asr:transcribe', async (_event, payload: unknown): Promise<string> => {
+  const request = parseAsrRequest(payload)
+  return transcribe(request)
+})
+
+function isAppOrigin(url: string): boolean {
+  return (
+    url.startsWith('file://') ||
+    url.startsWith('http://127.0.0.1:5173') ||
+    url.startsWith('http://localhost:5173')
+  )
+}
 
 function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -46,6 +67,18 @@ function createMainWindow(): BrowserWindow {
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error('[desktop] 渲染进程加载失败：', { errorCode, errorDescription, validatedURL })
   })
+
+  /**
+   * 麦克风权限：只允许本应用窗口申请 media，其他权限一律拒绝。
+   * 按住说话（ASR）需要 getUserMedia；不申请时保持默认拒绝。
+   */
+  mainWindow.webContents.session.setPermissionRequestHandler((contents, permission, callback) => {
+    callback(permission === 'media' && isAppOrigin(contents.getURL()))
+  })
+  mainWindow.webContents.session.setPermissionCheckHandler(
+    (contents, permission) =>
+      permission === 'media' && contents !== null && isAppOrigin(contents.getURL())
+  )
 
   /* 先隐藏、渲染就绪后再显示，避免白屏闪烁 */
   mainWindow.once('ready-to-show', () => {

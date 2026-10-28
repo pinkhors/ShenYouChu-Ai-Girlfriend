@@ -610,3 +610,15 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 44 passed / 0 failed。
 未验证：真实 ComfyUI/云 API、系统语音与 Electron 窗口；ASR/音素级口型未接。
+
+## Round 30：云端 TTS / ASR 与音频驱动口型（2026-10-28）
+
+- 主进程新增 `src/main/tts.ts`（OpenAI 兼容 `/audio/speech`）与 `src/main/asr.ts`（`/audio/transcriptions`，multipart 上传）；Key 与网络请求都留在主进程；
+- IPC `tts:synthesize` / `asr:transcribe` + preload 窄桥接；录音/合成参数在主进程校验；
+- 设置页新增「语音」卡片：TTS 可选系统语音 / 云端 TTS，ASR 可选云端识别；均存本机 localStorage，留空即禁用；
+- 通话页：云端 TTS 返回音频后用 `AnalyserNode` 取音量包络驱动口型，失败回退 Web Speech；按住麦克风录音 → ASR 转写 → 文本填入输入框；
+- 麦克风权限：只允许本应用 origin 的 `media` 请求，其他权限拒绝；
+- 测试 54 个（新增 TTS/ASR 参数校验、multipart 请求、语音配置归一化）。
+
+验证：`tsc --noEmit` exit 0；`npm test` 54 passed / 0 failed。
+未验证：真实 TTS/ASR 供应商、麦克风与 Electron 窗口；音素级 viseme 仍未接。

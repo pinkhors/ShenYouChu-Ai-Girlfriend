@@ -1429,6 +1429,12 @@ select {
   border-color: #f0c9c7;
 }
 
+.setting-card__divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
+
 .setting-card .btn {
   align-self: flex-start;
 }
@@ -2020,6 +2026,42 @@ select {
 .call__say-submit:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.call__mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.call__mic:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.call__mic:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.call__mic--recording {
+  border-color: transparent;
+  background: rgba(230, 67, 64, 0.9);
+  animation: mic-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  50% {
+    transform: scale(1.07);
+  }
 }
 
 .call__tray {

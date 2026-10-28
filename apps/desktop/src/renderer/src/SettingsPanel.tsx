@@ -1,5 +1,6 @@
 import type { UserView } from './api/client'
 import Icon from './ui/Icon'
+import VoiceSettings from './voice/VoiceSettings'
 
 interface SettingsPanelProps {
   readonly user: UserView
@@ -72,6 +73,8 @@ export default function SettingsPanel({
             可用环境变量 <code>VITE_API_BASE_URL</code> 覆盖；修改后重启应用生效。
           </p>
         </section>
+
+        <VoiceSettings />
 
         <section className="setting-card setting-card--danger">
           <h2 className="setting-card__title">危险操作</h2>
