@@ -54,6 +54,7 @@
 | 心情 / 亲密度展示 | 已实现 | 对接 `/character-state` |
 | 删除账号 | 已实现 | 二次确认 + 后端级联已真实验收 |
 | 语音占位 | 已实现 | 后端链路已真实验收 |
+| 每账号 LLM 配置 | 已实现 | `GET/PUT/DELETE /api/v1/settings/llm`、`POST /test`；Key 不回显；待真实模型端到端 |
 | 生产构建 / 运行 | 待本机验证 | 沙箱禁止构建脚本 spawn，需本机 `npm install` 补 Electron 二进制 |
 
 ## 四、如何复现验收

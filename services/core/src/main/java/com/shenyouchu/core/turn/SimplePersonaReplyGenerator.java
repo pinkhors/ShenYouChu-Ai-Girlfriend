@@ -1,18 +1,16 @@
 package com.shenyouchu.core.turn;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * M1 占位实现：不调用外部模型，按人设做简短确定性回应。
- * 目的是让消息、轮次、活动事件链路可端到端验证；LLM 接入时替换此实现即可。
+ * 确定性占位实现：不调用外部模型，按人设做简短回应。
+ * 没有用户配置或 LLM 调用失败时使用，保证对话链路始终可用。
  */
 @Component
-@ConditionalOnProperty(name = "shenyouchu.llm.enabled", havingValue = "false", matchIfMissing = true)
 public class SimplePersonaReplyGenerator implements ReplyGenerator {
 
     @Override
-    public String generate(String systemPrompt, String userText) {
+    public String generate(Long userId, String systemPrompt, String userText) {
         String trimmed = userText == null ? "" : userText.trim();
         if (trimmed.isEmpty()) {
             return "我在呢，你说。";

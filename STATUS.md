@@ -654,3 +654,30 @@ DEMO VERIFICATION PASSED: all 4 steps
 - 未改其他逻辑。
 
 验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
+
+## Round 34：每用户 LLM 配置（2026-10-28）
+
+- 新增 `user_llm_settings`（Flyway V3）：user_id 主键，enabled / base_url / model / api_key / max_tokens / temperature / timeout_seconds；账号删除时清理该行；
+- 新增 `UserLlmSettingsService` 与 `/api/v1/settings/llm`（GET / PUT / DELETE / POST test）：身份只来自 CurrentUser，Key 只写不回显，接口返回来源 USER/ENV/NONE；
+- `ReplyGenerator` 增加 userId 参数；`UserLlmReplyGenerator` 按当前用户选择配置，异常/空回复回退 `SimplePersonaReplyGenerator`；环境变量 LLM_* 作为用户未保存配置时的兜底；
+- `LlmHttpClient` 每次按用户配置创建请求，支持不同 Base URL / Key / 超时；
+- CORS 放行 PUT（设置接口需要）；
+- 设置页新增「模型（LLM）」卡片：启用开关、Base URL、模型、Key（留空不修改）、max tokens / temperature / timeout、保存、测试连接、恢复服务端默认；
+- 前端 API 增加 Llm* 类型与调用。
+
+验证：后端 `mvn -o -Dmaven.repo.local=.mvn-repo -DskipTests package` BUILD SUCCESS；前端 `tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
+未验证：真实 LLM 端到端、Flyway V3 在真实 MySQL 上执行、后端单测（沙箱 surefire 被管道限制）、设置页视觉。
+
+## Round 35：LLM 配置审查修复（2026-10-28）
+
+- CORS 放行 PUT（此前保存接口在桌面端会被预检拦截）；
+- LLM 调用移出数据库事务：`TurnService` 改为“先取会话/生成回复，再用 `TransactionTemplate` 写消息/记忆/关系/活动”，避免慢上游长时间占用连接池；
+- `UserLlmReplyGenerator` 把配置读取放进 try，DB 抖动也回退占位；
+- 后端补首次保存守卫：“启用 + 留空 Key + ENV 带 Key”返回 400，和前端拦截一致；
+- SSE 超时从 60s 提到 180s，覆盖用户可配的 120s LLM 读超时；
+- Base URL 校验补 query/fragment/`{}` 拒绝；`EffectiveLlmConfig.toString()` 对 apiKey 脱敏；
+- 前端加载失败时禁用整张模型卡片，避免用空表单覆盖 ENV 配置；ENV 空 Key 拦截只在“启用”时生效；温度输入不再把空值存成 0；
+- 新增后端单测：`EffectiveLlmConfigTest`、`LlmHttpClientTest`、`UserLlmSettingsServiceTest`（Mockito；沙箱内 surefire 无法 fork，仅保证 testCompile 通过）。
+
+验证：后端 `mvn -o -Dmaven.repo.local=.mvn-repo -DskipTests package` BUILD SUCCESS；前端 `tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
+未验证：真实模型端到端、真实 MySQL 上的 V3 迁移、后端测试执行（沙箱限制）、设置页视觉。

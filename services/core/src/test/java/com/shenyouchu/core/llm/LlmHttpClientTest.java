@@ -7,12 +7,12 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class HttpLlmReplyGeneratorTest {
+class LlmHttpClientTest {
 
     @Test
     @SuppressWarnings("unchecked")
     void bodyContainsModelSystemAndUserMessages() {
-        Map<String, Object> body = HttpLlmReplyGenerator.buildBody("test-model", "SYSTEM", "USER", 128, 0.5);
+        Map<String, Object> body = LlmHttpClient.buildBody("test-model", "SYSTEM", "USER", 128, 0.5);
 
         assertThat(body).containsEntry("model", "test-model");
         assertThat(body).containsEntry("max_tokens", 128);

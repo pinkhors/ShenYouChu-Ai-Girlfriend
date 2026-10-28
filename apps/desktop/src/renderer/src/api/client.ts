@@ -92,7 +92,7 @@ export function setOnUnauthorized(handler: UnauthorizedHandler | null): void {
 }
 
 interface RequestOptions {
-  readonly method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  readonly method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** 需要序列化为 JSON 的请求体；无请求体时省略。 */
   readonly body?: unknown
   readonly signal?: AbortSignal
@@ -376,4 +376,55 @@ export function getCharacterState(): Promise<CharacterState> {
 /** 删除当前账号：服务端级联清理，返回后本地凭证必须立即清除。 */
 export function deleteAccount(): Promise<void> {
   return request<void>('/account/deletion', { method: 'POST' })
+}
+
+/** 当前用户 LLM 配置的来源：USER=用户自己保存的，ENV=服务端环境变量兜底，NONE=未配置。 */
+export type LlmSettingsSource = 'USER' | 'ENV' | 'NONE'
+
+export interface LlmSettingsView {
+  readonly enabled: boolean
+  readonly baseUrl: string
+  readonly model: string
+  /** 只表示“已保存 Key”，接口不会返回 Key 明文。 */
+  readonly hasApiKey: boolean
+  readonly maxTokens: number
+  readonly temperature: number
+  readonly timeoutSeconds: number
+  readonly source: LlmSettingsSource
+  readonly updatedAt: string | null
+}
+
+export interface LlmSettingsInput {
+  readonly enabled: boolean
+  readonly baseUrl: string
+  readonly model: string
+  /** 留空表示不修改已有 Key。 */
+  readonly apiKey: string
+  readonly maxTokens: number
+  readonly temperature: number
+  readonly timeoutSeconds: number
+}
+
+export interface LlmTestResult {
+  readonly ok: boolean
+  readonly latencyMs: number
+  readonly model: string
+  readonly error: string | null
+}
+
+export function getLlmSettings(): Promise<LlmSettingsView> {
+  return request<LlmSettingsView>('/settings/llm')
+}
+
+export function saveLlmSettings(input: LlmSettingsInput): Promise<LlmSettingsView> {
+  return request<LlmSettingsView>('/settings/llm', { method: 'PUT', body: input })
+}
+
+/** 删除用户自己的配置，回退到服务端环境变量 / 占位回复。 */
+export function resetLlmSettings(): Promise<void> {
+  return request<void>('/settings/llm', { method: 'DELETE' })
+}
+
+export function testLlmSettings(): Promise<LlmTestResult> {
+  return request<LlmTestResult>('/settings/llm/test', { method: 'POST' })
 }

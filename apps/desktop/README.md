@@ -1,6 +1,6 @@
 # 沈幼楚桌面客户端（apps/desktop）
 
-Electron + React + TypeScript 桌面客户端。当前为 **M1：登录、会话增删查、会话内消息与 SSE 流式回复、记忆列表、活动记录**，语音、视觉、Live2D 仅保留挂载点与 TODO 注释。
+Electron + React + TypeScript 桌面客户端。当前为 **M1：登录、会话增删查、会话内消息与 SSE 流式回复、记忆列表、活动记录、每账号 LLM 配置**，语音、视觉、Live2D 仅保留挂载点与 TODO 注释。
 
 界面已改为**微信式三栏布局**（左侧导航 / 会话列表 / 主内容区），并在「形象」页提供两条路线：
 
@@ -109,7 +109,8 @@ apps/desktop/
             ├── LookPage.tsx          # 形象页：立绘 / 捏脸两个 tab
             ├── MemoryPanel.tsx       # 记忆页
             ├── ActivityPanel.tsx     # 活动记录页
-            ├── SettingsPanel.tsx     # 设置页（账户/形象/连接/危险操作）
+            ├── SettingsPanel.tsx     # 设置页（账户/形象/连接/模型/语音/危险操作）
+            ├── LlmSettingsCard.tsx   # 设置页「模型（LLM）」卡片
             ├── avatar/               # 捏脸：参数模型、SVG 渲染、编辑器、本地存储
             ├── portrait/             # 立绘：表情模型、导入压缩、IndexedDB、出图、通话页
             ├── voice/                # TTS/ASR 配置、系统语音、音频 analyser、录音
@@ -125,6 +126,24 @@ apps/desktop/
 - **捏脸**：`avatar/avatarConfig.ts` 定义 13 个参数（枚举 + 0..1 连续值），`GirlfriendAvatar` 用分层 SVG 渲染半写实预览；`AvatarEditor` 提供色板、滑杆、分段选择、4 套预设、随机与恢复默认。
 - **持久化**：按用户写入 `localStorage`（key `shenyouchu.avatar.v1.<userId>`），不新增后端接口；换设备不同步，删除账号时同步清除本机形象。
 - **可替换渲染**：编辑器只依赖 `AvatarConfig`；接入生成式写实渲染（本地 SD/ComfyUI 或商用数字人）时替换 `GirlfriendAvatar`，参数与存储不变。
+
+## 模型（LLM）配置（每账号独立）
+
+设置页「模型（LLM）」卡片用于给当前账号配置 OpenAI 兼容的聊天服务。配置存在后端，换设备登录同一账号仍生效；没有保存自己的配置时回退服务端环境变量，再回退确定性占位回复。
+
+- **字段**：启用开关、Base URL（含 `/v1`）、模型、API Key、Max tokens（1–4096）、Temperature（0–2）、超时秒数（1–120）。
+- **Key**：密码框只写不读；已保存时占位提示「已保存，留空不修改」，留空保存会保留原 Key。后端只返回 `hasApiKey`，任何接口都不回显明文。
+- **来源徽标**：「用户配置」表示使用本账号保存的配置；「服务端默认」表示没有保存自己的配置、正在用服务端 `LLM_*` 环境变量；「未配置」表示没有可用的用户配置或环境变量，走确定性占位回复。旁边的「Key 已保存」只表示后端存了 Key。
+- **保存与生效**：点「保存」后从下一条消息生效，不需要重启后端；启用时必须填 Base URL 与模型。
+- **测试连接**：**使用已保存的配置**，不是输入框里尚未保存的值；改完参数先保存再测试。成功显示耗时与模型名，失败显示后端返回的截断原因。
+- **恢复服务端默认**：删除本账号保存的配置与 Key，回退到服务端环境变量/占位回复；若服务端环境变量本身配置了 Key，重置后仍会显示「Key 已保存」；操作前会二次确认。
+- **安全**：Key 存在服务端 MySQL（当前明文，仅服务端可读，接口不回显），不写入本机 `localStorage`；共用后端时仍应注意数据库备份与访问权限。
+
+示例：DeepSeek 填 `https://api.deepseek.com/v1` + `deepseek-chat`；DashScope 填 `https://dashscope.aliyuncs.com/compatible-mode/v1` + `qwen-plus`。
+
+> 服务端默认（`ENV`）的 Key 不会复制到用户配置。卡片处于「服务端默认」且已有 Key 时，若想改成用户配置，需要填自己的 Key；只想继续用服务端默认则不要保存。后端在“首次保存 + 启用 + 留空 Key + ENV 带 Key”时也会返回 400，不只是前端拦截。
+
+> Base URL 由用户填写，服务端只校验 http/https、主机名与无 query/fragment；自用/小范围可接受，公开多租户部署前应增加私网/云元数据地址拦截与出站代理，避免 SSRF。
 
 ## 立绘与通话（本机）
 
@@ -241,7 +260,7 @@ ComfyUI（本地）：
 
 - **AI 出图是“能调通、待实测”**：ComfyUI 用固定 SDXL 基础工作流（不支持 LoRA/ControlNet），云 API 的参数/尺寸兼容性因供应商而异；没有真实服务时无法端到端验证；
 - **语音是“可选、待实测”**：云端 TTS/ASR 需要自己填服务，未对真实供应商验证；系统语音拿不到音频，口型只能节奏驱动；音素级 viseme 未接；录音会把音频上传到配置的 ASR 服务；
-- **密钥安全**：出图 / TTS / ASR 的 Key 都明文存 `localStorage`，只适合自用/小圈子；后续应迁到主进程 `safeStorage`；
+- **密钥安全**：出图 / TTS / ASR 的 Key 都明文存 `localStorage`，只适合自用/小圈子；后续应迁到主进程 `safeStorage`；LLM 的 Key 存在服务端 MySQL（当前明文、接口不回显），不在本机保存；
 - **不接微信/QQ**：个人微信与 QQ 没有官方聊天/通话 API，非官方 hook 违反平台协议；若要“在微信里用”，需走微信小程序路线（本期未做）；
 - TODO(M2 视觉)、TODO(M3 Live2D)：仅注释占位，未实现；后端语音仍为 M2 占位链路（文本 Base64 → ASR → 轮次 → TTS），真实模型接入见 docs/05；
 - TODO(M3 安全存储)：`tokenStore` 迁移到 `safeStorage` + 受限 IPC；

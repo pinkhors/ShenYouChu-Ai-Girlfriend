@@ -15,7 +15,9 @@ import com.shenyouchu.core.relationship.RelationshipService;
 import com.shenyouchu.core.relationship.dto.CharacterStateView;
 import com.shenyouchu.core.turn.dto.TurnResponse;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.List;
@@ -32,6 +34,7 @@ public class TurnService {
     private final ActivityService activityService;
     private final MemoryService memoryService;
     private final RelationshipService relationshipService;
+    private final TransactionTemplate transactionTemplate;
 
     public TurnService(ConversationMapper conversationMapper,
                        MessageMapper messageMapper,
@@ -39,7 +42,8 @@ public class TurnService {
                        ReplyGenerator replyGenerator,
                        ActivityService activityService,
                        MemoryService memoryService,
-                       RelationshipService relationshipService) {
+                       RelationshipService relationshipService,
+                       PlatformTransactionManager transactionManager) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.personaService = personaService;
@@ -47,12 +51,31 @@ public class TurnService {
         this.activityService = activityService;
         this.memoryService = memoryService;
         this.relationshipService = relationshipService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
+    /**
+     * 一轮对话：外部模型调用放在事务外，避免慢上游长时间占用连接池；
+     * 回复生成后，再把消息、记忆、关系与活动事件放进同一个短事务。
+     */
     public TurnResponse send(Long userId, Long conversationId, String text) {
         Conversation conversation = requireOwned(userId, conversationId);
         String turnId = UUID.randomUUID().toString();
+
+        String prompt = personaService.systemPrompt(conversation.getCharacterId());
+        String reply = replyGenerator.generate(userId, prompt, text);
+
+        TurnResponse response = transactionTemplate.execute(status ->
+                persistTurn(conversation, userId, text, turnId, reply));
+        if (response == null) {
+            throw new IllegalStateException("事务未返回轮次结果");
+        }
+        return response;
+    }
+
+    private TurnResponse persistTurn(Conversation conversation, Long userId, String text,
+                                     String turnId, String reply) {
+        Long conversationId = conversation.getId();
 
         Message userMessage = new Message(conversationId, userId, turnId, "user", text);
         messageMapper.insert(userMessage);
@@ -63,9 +86,6 @@ public class TurnService {
             activityService.record(userId, "memory.created", "SYSTEM", "core", conversationId, turnId, null,
                     Map.of("sourceMessageId", String.valueOf(userMessage.getId())));
         }
-
-        String prompt = personaService.systemPrompt(conversation.getCharacterId());
-        String reply = replyGenerator.generate(prompt, text);
 
         Message assistantMessage = new Message(conversationId, userId, turnId, "assistant", reply);
         messageMapper.insert(assistantMessage);

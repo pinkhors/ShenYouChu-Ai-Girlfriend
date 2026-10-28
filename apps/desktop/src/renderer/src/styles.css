@@ -1435,6 +1435,73 @@ select {
   background: var(--border);
 }
 
+.setting-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.llm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #444;
+  font-size: 13px;
+}
+
+.llm-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
+.llm-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f2f2f2;
+  color: #666;
+  font-size: 11px;
+}
+
+.llm-badge--user {
+  background: #e8f7ee;
+  color: #0a8f4c;
+}
+
+.llm-badge--env {
+  background: #eef3ff;
+  color: #4569b5;
+}
+
+.llm-badge--none {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.llm-badge--key {
+  background: #fff4e5;
+  color: #a56a12;
+}
+
+.llm-test {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.llm-test--ok {
+  background: #edf9f2;
+  color: #0a8f4c;
+}
+
+.llm-test--fail {
+  background: #fdeeee;
+  color: #b03a37;
+}
+
 .setting-card .btn {
   align-self: flex-start;
 }

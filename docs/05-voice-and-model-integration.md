@@ -8,7 +8,7 @@
 
 | seam | 接口 | 占位实现（默认） | 真实实现（配置开启后生效） |
 |---|---|---|---|
-| LLM 回复 | `ReplyGenerator` | `SimplePersonaReplyGenerator` | `HttpLlmReplyGenerator`（`LLM_ENABLED=true`） |
+| LLM 回复 | `ReplyGenerator` | `SimplePersonaReplyGenerator` | `UserLlmReplyGenerator`（用户配置；未保存时 `LLM_ENABLED=true`） |
 | 语音识别 | `AsrAdapter` | `StubAsrAdapter` | `HttpAsrAdapter`（`VOICE_ENABLED=true` + `VOICE_ASR_URL`） |
 | 语音合成 | `TtsAdapter` | `StubTtsAdapter` | `HttpTtsAdapter`（`VOICE_ENABLED=true` + `VOICE_TTS_URL`） |
 
@@ -17,6 +17,28 @@
 ## 一、接入真实 LLM
 
 支持的接口是 OpenAI 兼容的 `POST {base-url}/chat/completions`。
+
+### 用户级配置（优先，推荐）
+
+每个账号可以在桌面端「设置 → 模型（LLM）」保存自己的 Base URL、模型、Key、maxTokens、temperature 与超时，不需要改环境变量，也不需要重启后端。保存后从下一条消息开始生效。
+
+优先级：
+
+1. **用户自己的配置**——保存过就优先生效，即使把开关关掉（`enabled=false`）也不再读环境变量；
+2. **服务端环境变量 `LLM_*`**——仅在用户没有保存自己的配置时兜底；
+3. **确定性占位回复**——用户关闭真实 LLM，或有效配置缺失/调用失败时。
+
+操作顺序：
+
+1. 填 Base URL（含 `/v1`，只支持 http/https）与模型名；
+2. 填 API Key；留空表示保留已保存的 Key，不会清空；
+3. 点「保存」，卡片顶部徽标会变成「用户配置」，并显示「Key 已保存」；
+4. 点「测试连接」验证。**“测试连接”使用已保存的配置**，改完参数要先保存再测试；
+5. 想放弃自己的配置时点「恢复服务端默认」，会删除用户配置行并回退到环境变量/占位回复。
+
+没有保存自己配置的账号，卡片显示「服务端默认」时使用下面的环境变量；显示「未配置」则说明环境变量也没有配好，会走确定性占位回复。接口、字段与错误约定见[数据与接口契约 §3.7](./contracts/data-and-interface-contracts.md)。Key 当前以明文存 MySQL（仅服务端可读，接口不回显），**不要宣称加密**；桌面端也不在本机保存这个 Key。
+
+### 服务端环境变量（兜底）
 
 > **配置位置**：用 `mvn spring-boot:run` 或 IDEA 启动 core 时，不要在根目录 `.env` 里填这些值——`.env` 只被 `docker compose` 读取，Spring Boot 不会自动加载。请设置到 **启动 core 的进程环境变量**（见下面命令 / IDEA Run Configuration）。
 
@@ -163,7 +185,8 @@ PRD 的主体验指标是：**用户说完一句话 → 客户端实际听到第
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 回复内容像模板 | `LLM_ENABLED` 未生效或调用失败 | 看后端日志 `LLM call failed`，检查 base-url/key/模型名 |
+| 回复内容像模板 | 用户配置/环境变量都未生效，或调用失败 | 设置页看来源徽标并「测试连接」；或看后端日志 `LLM call failed`，检查 base-url/key/模型名 |
+| 「测试连接」提示先启用并填写 | 当前有效配置不可用（未启用或缺 Base URL/模型） | 填好并保存后再测；未保存时测的是服务端环境变量兜底 |
 | 语音识别结果为空 | ASR 服务不可达或返回空 text | 后端日志 `ASR service call failed`；确认包装服务协议字段一致 |
 | 语音格式为 `none` | TTS 未启用或失败 | 后端日志 `TTS service call failed`；确认 `audioBase64` 合法 |
 | 首音延迟很高 | 冷启动或 TTS 未按句流式 | 预热模型；后续里程碑接入按句流式合成 |

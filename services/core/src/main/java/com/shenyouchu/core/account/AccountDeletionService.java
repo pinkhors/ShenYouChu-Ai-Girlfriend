@@ -6,6 +6,7 @@ import com.shenyouchu.core.auth.UserSession;
 import com.shenyouchu.core.auth.mapper.UserSessionMapper;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
+import com.shenyouchu.core.llm.settings.mapper.UserLlmSettingsMapper;
 import com.shenyouchu.core.memory.Memory;
 import com.shenyouchu.core.memory.mapper.MemoryMapper;
 import com.shenyouchu.core.message.Message;
@@ -33,6 +34,7 @@ public class AccountDeletionService {
     private final MessageMapper messageMapper;
     private final MemoryMapper memoryMapper;
     private final UserCharacterStateMapper stateMapper;
+    private final UserLlmSettingsMapper llmSettingsMapper;
     private final ActivityService activityService;
     private final List<AccountPurgePort> purgePorts;
 
@@ -42,6 +44,7 @@ public class AccountDeletionService {
                                   MessageMapper messageMapper,
                                   MemoryMapper memoryMapper,
                                   UserCharacterStateMapper stateMapper,
+                                  UserLlmSettingsMapper llmSettingsMapper,
                                   ActivityService activityService,
                                   List<AccountPurgePort> purgePorts) {
         this.userMapper = userMapper;
@@ -50,6 +53,7 @@ public class AccountDeletionService {
         this.messageMapper = messageMapper;
         this.memoryMapper = memoryMapper;
         this.stateMapper = stateMapper;
+        this.llmSettingsMapper = llmSettingsMapper;
         this.activityService = activityService;
         this.purgePorts = purgePorts;
     }
@@ -68,6 +72,7 @@ public class AccountDeletionService {
                 .eq(Conversation::getUserId, userId));
         int states = stateMapper.delete(Wrappers.<UserCharacterState>lambdaQuery()
                 .eq(UserCharacterState::getUserId, userId));
+        int llmSettings = llmSettingsMapper.deleteById(userId);
 
         User user = userMapper.selectById(userId);
         if (user != null) {
@@ -82,6 +87,6 @@ public class AccountDeletionService {
 
         activityService.record(userId, "data.deletion_completed", "SYSTEM", "core", null, null, null,
                 Map.of("sessions", sessions, "messages", messages, "memories", memories,
-                        "conversations", conversations, "states", states));
+                        "conversations", conversations, "states", states, "llmSettings", llmSettings));
     }
 }

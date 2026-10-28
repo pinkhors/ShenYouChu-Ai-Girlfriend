@@ -239,7 +239,31 @@
 | idempotency_key | VARCHAR(64) | 唯一 |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
 
-### 2.12 时间字段命名待确认
+### 2.12 user_llm_settings
+
+用户级 LLM 配置，一个用户一行，`user_id` 即主键。未保存配置时回退服务端环境变量。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| user_id | BIGINT | 主键，同时是归属（外键 `users.id`） |
+| enabled | BOOLEAN | 是否启用真实 LLM；`false` 时用确定性占位回复，且不再回退环境变量 |
+| base_url | VARCHAR(500) | OpenAI 兼容地址（含 `/v1`），可空 |
+| model | VARCHAR(200) | 模型名，可空 |
+| api_key | VARCHAR(512) | 供应商 Key，**当前明文存储**，仅服务端读取，接口不回显 |
+| max_tokens | INT | 默认 512，范围 1–4096 |
+| temperature | DECIMAL(3,2) | 默认 0.8，范围 0–2 |
+| timeout_seconds | INT | 默认 60，范围 1–120 |
+| created_at / updated_at | DATETIME(3) | 审计；`updated_at` 由数据库维护 |
+
+约束：
+
+- 用户显式保存过配置后（即使 `enabled=false`）不再使用环境变量，避免“改了不生效”的困惑；
+- 删除账号时随用户一起删除该行；
+- `api_key` 以明文存 MySQL 是当前实现的已知取舍，文档不得表述为“加密存储”；迁移到加密列或密钥管理前，数据库备份与只读账号同样按高敏感数据处理。
+
+该表不设 `deleted_at`：DELETE 接口与账号删除都直接物理删除该行。
+
+### 2.13 时间字段命名待确认
 
 当前规范采用 `created_at / updated_at / deleted_at / occurred_at`。原始需求提出 `create_date + create_time + update_date + update_time` 四字段方案；两者不混用。未确认前按本规范实现，确认后统一迁移（见 C-6）。
 
@@ -302,12 +326,88 @@
 |---|---|---|
 | GET | `/settings` | 获取设置（录制开关、追踪开关与级别、保留期） |
 | PATCH | `/settings` | 更新设置，写入活动事件 |
+| GET | `/settings/llm` | 当前用户的 LLM 配置视图（不含 Key 明文） |
+| PUT | `/settings/llm` | 保存当前用户的 LLM 配置，返回同 GET 视图 |
+| DELETE | `/settings/llm` | 删除当前用户的 LLM 配置并回退服务端默认，204 |
+| POST | `/settings/llm/test` | 用当前有效配置发一条最小请求，返回连通性与耗时 |
 | POST | `/data/deletion-requests` | 请求删除账号或指定资源，返回 jobId |
 | GET | `/data/deletion-requests/{jobId}` | 查询删除进度 |
 | GET | `/character-state` | 当前用户与默认角色的心情/亲密度（无记录返回初始值） |
 | POST | `/account/deletion` | 删除当前账号：MySQL 级联逻辑删除、会话失效、Redis 清理（可选）、审计事件 |
 
-### 3.7 搜索
+### 3.7 用户级 LLM 配置（`/settings/llm`）
+
+每个用户只能读写自己的配置；`user_id` 只来自认证上下文，路径与请求体都不接受归属用户。四个接口均要求 `Authorization: Bearer <token>`，未认证返回 401。
+
+**有效配置优先级**（回复生成与“测试连接”共用）：
+
+1. 用户自己的配置（`source=USER`），即使 `enabled=false` 也不再读环境变量；
+2. 服务端环境变量 `LLM_*`（`source=ENV`），仅当用户没有自己的配置时生效；
+3. 确定性占位回复（`source=NONE` 或用户配置 `enabled=false`）。
+
+**GET `/settings/llm`** 响应：
+
+```json
+{
+  "enabled": true,
+  "baseUrl": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "hasApiKey": true,
+  "maxTokens": 512,
+  "temperature": 0.8,
+  "timeoutSeconds": 60,
+  "source": "USER",
+  "updatedAt": "2026-10-28T07:00:00.000Z"
+}
+```
+
+- `source`：`USER`=用户自己的配置，`ENV`=服务端环境变量兜底，`NONE`=未配置；
+- 只返回 `hasApiKey`，**任何响应都不包含 `apiKey` 明文**；
+- 回退到 `ENV` 或 `NONE` 时 `updatedAt` 为 `null`。
+
+**PUT `/settings/llm`** 请求：
+
+```json
+{
+  "enabled": true,
+  "baseUrl": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "apiKey": "sk-...",
+  "maxTokens": 512,
+  "temperature": 0.8,
+  "timeoutSeconds": 60
+}
+```
+
+规则：
+
+- `apiKey` 为空或空白表示“保留已保存的 Key”，不会清空；要清空 Key 只能通过 DELETE 恢复默认；
+- 首次保存且 `apiKey` 为空时，用户配置没有 Key，**不会继承**环境变量的 Key；若此时 `enabled=true` 且服务端 ENV 配置可用并带 Key，后端返回 400 `VALIDATION_FAILED`（桌面端也会提前拦截），需填写自己的 Key 或保持不保存；
+- `enabled=true` 时 `baseUrl`、`model` 必填；
+- `baseUrl` 只接受 `http` / `https`，且必须有主机名，不能带 query/fragment 或 `{}`；保存时去掉末尾 `/`；
+- Base URL 由用户填写；自用/小范围可接受，公开多租户部署前应增加私网/云元数据地址拦截与出站代理，避免 SSRF；
+- `maxTokens` 1–4096（默认 512）、`temperature` 0–2（默认 0.8）、`timeoutSeconds` 1–120（默认 60）；
+- 保存成功后返回与 GET 相同的视图；请求体不合法返回 400 `VALIDATION_FAILED`。
+
+**DELETE `/settings/llm`**：删除当前用户的配置行，返回 204；之后按环境变量/占位回复工作。账号删除时由账号清理流程一并删除该行。
+
+**POST `/settings/llm/test`**：使用**已保存的**有效配置发一条最小 `chat/completions` 请求（`max_tokens` 上限 32），用于设置页“测试连接”；无请求体。
+
+```json
+{ "ok": true, "latencyMs": 812, "model": "deepseek-chat", "error": null }
+```
+
+- 连通但上游返回错误时为 `ok=false`，`error` 为截断后的原因（超过 300 字符加省略号）；错误信息与日志不得包含 Key，HTTP 仍为 200；
+- 当前有效配置不可用（未启用或缺少 Base URL/模型）时返回 400 `VALIDATION_FAILED`；
+- 用户保存了 `enabled=false` 的配置时，测试按该配置判定为不可用并返回 400，不会回退环境变量；
+- 测试不会写入配置，也不会改变当前来源。
+
+安全与隔离：
+
+- Key 当前以明文存于 MySQL `user_llm_settings.api_key`，仅服务端读取；接口只暴露 `hasApiKey`，日志与错误体不得包含 Key；
+- A 的凭证不能读取、修改或测试 B 的配置，也不存在按 userId 操作的入口；越权访问按 404 处理。
+
+### 3.8 搜索
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -352,7 +452,7 @@ rebuild(scope)
 
 P1 实现 `MySqlSearchAdapter`（FULLTEXT + ngram）；后续可增加 `OpenSearchAdapter`，业务代码与接口不变。未来索引文档字段约定为：`docId`、`userId`、`entityType`、`entityId`、`conversationId`、`actor`、`content`、`occurredAt`、`deleted`、`schemaVersion`、`updatedAt`。
 
-### 3.8 错误格式
+### 3.9 错误格式
 
 ```json
 {
@@ -365,7 +465,7 @@ P1 实现 `MySqlSearchAdapter`（FULLTEXT + ngram）；后续可增加 `OpenSear
 
 常用码：`UNAUTHENTICATED`(401)、`FORBIDDEN`(403)、`NOT_FOUND`(404)、`VALIDATION_FAILED`(400)、`CONFLICT`(409)、`RATE_LIMITED`(429)、`UPSTREAM_UNAVAILABLE`(503)、`TURN_ALREADY_CANCELLED`(409)、`RECORDING_NOT_READY`(409)、`REASON_REQUIRED`(400)、`SEARCH_UNAVAILABLE`(503)。越权资源统一返回 404，避免泄露存在性。
 
-### 3.9 幂等与重试
+### 3.10 幂等与重试
 
 - 所有 POST/PATCH/DELETE 支持 `Idempotency-Key`；
 - 重试不得产生重复消息、重复记忆或重复删除任务；
@@ -465,7 +565,7 @@ P1 实现 `MySqlSearchAdapter`（FULLTEXT + ngram）；后续可增加 `OpenSear
 | EmbeddingAdapter | 文本列表 | 向量 + 模型名/维度 | 维度变更需重建索引 |
 | VisionAdapter（内部） | 帧或媒体引用 | VisualSignal | 丢帧优先于堆积 |
 
-统一要求：超时、重试、降级、幂等、可观测；模型 ID 与密钥来自配置；契约测试覆盖正常、超时、取消与错误映射。
+统一要求：超时、重试、降级、幂等、可观测；模型 ID 与密钥来自用户级配置或服务端环境变量，禁止硬编码；契约测试覆盖正常、超时、取消与错误映射。
 
 ## 7. 存储与隔离契约
 
@@ -521,15 +621,17 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 8. 日志与错误体不泄露他人资源存在性或敏感内容；
 9. A 的搜索查询永远不返回 B 的消息、记忆、活动或录像元数据；
 10. `operator` 缺少角色、缺少事由或超出授权范围时检索被拒绝，且不产生任何命中；
-11. 每次成功的运营检索都存在 `admin.search.performed` 审计事件，字段完整。
+11. 每次成功的运营检索都存在 `admin.search.performed` 审计事件，字段完整；
+12. A 无法读取、修改或测试 B 的 LLM 配置，A 的“测试连接”只使用 A 的有效配置。
 
 ## 10. 隐私分级
 
 | 级别 | 数据 | 要求 |
 |---|---|---|
 | 高 | 密码哈希、对话正文、记忆、录像、音频 | 加密传输，最小访问，删除可级联，禁止进日志 |
+| 高 | 用户 LLM 配置（含 `api_key`） | 仅服务端可读，接口不回显、禁止进日志；当前明文入库，备份与只读账号同样按高敏感数据保护 |
 | 中 | 视觉估计、活动事件、关系状态 | 归属明确，保留期，默认不公开 |
-| 低 | 角色模板、模型配置、公开文档 | 可公开 |
+| 低 | 角色模板、公开的模型元数据、公开文档 | 可公开 |
 
 搜索访问规则（ADR-0002）：
 

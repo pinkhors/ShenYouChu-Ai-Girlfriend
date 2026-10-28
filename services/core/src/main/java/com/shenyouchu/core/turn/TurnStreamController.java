@@ -45,7 +45,8 @@ public class TurnStreamController {
     public SseEmitter stream(@PathVariable Long conversationId, @Valid @RequestBody TurnRequest request) {
         Long userId = CurrentUser.require().userId();
         String text = request.message().trim();
-        SseEmitter emitter = new SseEmitter(60_000L);
+        /* 用户可把 LLM 读超时配到 120s，SSE 超时留出余量，避免服务端还在生成时客户端先断 */
+        SseEmitter emitter = new SseEmitter(180_000L);
 
         CompletableFuture.runAsync(() -> {
             String turnId = null;
