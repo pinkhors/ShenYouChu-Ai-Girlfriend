@@ -3,6 +3,7 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "lib": ["ES2022", "DOM"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,6 +14,8 @@
   "include": [
     "tests/**/*.ts",
     "src/renderer/src/api/sse.ts",
-    "src/renderer/src/api/encoding.ts"
+    "src/renderer/src/api/encoding.ts",
+    "src/renderer/src/api/turnStream.ts",
+    "src/renderer/src/auth/tokenStore.ts"
   ]
 }

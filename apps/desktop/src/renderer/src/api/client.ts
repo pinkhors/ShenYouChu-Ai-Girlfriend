@@ -1,6 +1,7 @@
 import { getToken } from '../auth/tokenStore'
-import { parseFrame, readPayloadField } from './sse'
+import { TurnStreamParser, type TurnStreamHandlers } from './turnStream'
 
+export type { TurnStreamHandlers } from './turnStream'
 export { textToBase64, base64ToText } from './encoding'
 
 /**
@@ -242,12 +243,6 @@ export function sendTurn(conversationId: string, message: string): Promise<TurnR
   })
 }
 
-export interface TurnStreamHandlers {
-  readonly onStarted?: (turnId: string) => void
-  readonly onDelta?: (delta: string) => void
-  readonly onCompleted?: (turnId: string, messageId: string) => void
-}
-
 /**
  * SSE 流式轮次：解析后端 turn.started / assistant.text.delta / turn.completed。
  * 使用 fetch + ReadableStream 而非 EventSource，因为需要 POST 请求体与 Authorization 头。
@@ -284,40 +279,14 @@ export async function streamTurn(
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = ''
+  const parser = new TurnStreamParser(handlers)
 
   for (;;) {
     const { value, done } = await reader.read()
     if (done) {
       break
     }
-    buffer += decoder.decode(value, { stream: true })
-
-    let separator = buffer.indexOf('\n\n')
-    while (separator >= 0) {
-      const frame = buffer.slice(0, separator)
-      buffer = buffer.slice(separator + 2)
-      const parsed = parseFrame(frame)
-      if (parsed !== null) {
-        if (parsed.event === 'turn.started') {
-          const turnId = readPayloadField(parsed.data, 'turnId')
-          if (turnId !== undefined) {
-            handlers.onStarted?.(turnId)
-          }
-        } else if (parsed.event === 'assistant.text.delta') {
-          const delta = readPayloadField(parsed.data, 'delta')
-          if (delta !== undefined) {
-            handlers.onDelta?.(delta)
-          }
-        } else if (parsed.event === 'turn.completed') {
-          handlers.onCompleted?.(
-            readPayloadField(parsed.data, 'turnId') ?? '',
-            readPayloadField(parsed.data, 'messageId') ?? ''
-          )
-        }
-      }
-      separator = buffer.indexOf('\n\n')
-    }
+    parser.push(decoder.decode(value, { stream: true }))
   }
 }
 

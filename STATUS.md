@@ -469,3 +469,26 @@ DEMO VERIFICATION PASSED: all 4 steps
 验证：`tsc --noEmit` exit 0；`tsc -p tsconfig.test.json` exit 0；`node --test` **9 passed / 0 failed**。
 
 下一轮：Milvus 向量清理端口（P2）或 README 最终收尾核对。
+
+## Round 23–24 进展（2026-10-28）
+
+已实现并验证：
+
+- 可测试性重构：
+  - 新增 `api/turnStream.ts`：`TurnStreamParser` 负责增量拼帧与事件分发，可处理一帧跨多次 push、
+    一次 push 多帧、结尾残留半帧；
+  - `client.ts` 的 `streamTurn` 改为使用该解析器；
+  - `auth/tokenStore.ts` 拆出 `createTokenStore(storage)`，并声明结构相同的 `TokenUser`
+    （不再依赖 api/client 类型），从而可在 Node 中独立测试；
+- 前端测试扩展到 **18 个用例**：SSE 帧解析、流式拼帧、UTF-8 Base64、token 存储（含损坏数据与存储禁用降级）；
+- `tsconfig.test.json` 纳入新模块；`npm test` 脚本更新；README 测试章节同步。
+
+验证：
+
+```text
+tsc --noEmit          exit 0
+tsc -p tsconfig.test  exit 0
+node --test           18 passed / 0 failed
+```
+
+下一轮：Milvus 向量清理端口（P2）或最终收尾核对（README/验收清单/待确认项汇总）。

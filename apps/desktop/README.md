@@ -64,10 +64,12 @@ cd apps\desktop
 npm test
 ```
 
-覆盖内容：
+覆盖内容（18 个用例）：
 
 - SSE 帧解析（`event:` / `data:` 多行、无 data 帧、JSON 字段提取、非法 JSON 容错）；
-- UTF-8 Base64 编解码（中文、emoji、空串，与 Node `Buffer` 结果对齐）。
+- 流式拼帧（一帧跨多次 push、一次 push 多帧、结尾残留半帧、未知事件忽略）；
+- UTF-8 Base64 编解码（中文、emoji、空串，与 Node `Buffer` 结果对齐）；
+- token 存储（读写往返、损坏 JSON、结构不符、清空、存储被禁用时降级为未登录）。
 
 原理：`tsc -p tsconfig.test.json` 编译到 `out-tsc/`，脚本在其中写入 `{"type":"commonjs"}`
 标记（因为包本身是 `"type": "module"`），再用 `node --test` 运行。因此这些测试在受限环境
