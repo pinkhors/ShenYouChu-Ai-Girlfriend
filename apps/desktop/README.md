@@ -292,7 +292,7 @@ npm run dev
 | 消息不流式、直接整段出现 | 用了 `/turns` 而非 `/turns/stream`，或代理缓冲 SSE | 确认前端走 `streamTurn`，代理需关闭缓冲 |
 | 中文回复乱码 | 终端编码非 UTF-8 | 后端已强制 UTF-8；终端执行 `chcp 65001` |
 | 生图提示“没有检测到出图通道” | 在浏览器标签页打开，或 Electron 仍在用旧 preload | 必须在 Electron 窗口里；完全退出后重新 `npm run dev`（preload 改动不会 HMR） |
-| 启动后停在 `start electron app...`，没有窗口 | 环境里设置了 `ELECTRON_RUN_AS_NODE=1`，Electron 会以 Node 模式运行 | `npm run dev` 已通过 `scripts/dev.mjs` 自动清掉；也可手动 `Remove-Item Env:ELECTRON_RUN_AS_NODE` 后重试 |
+| 启动后停在 `start electron app...`，没有窗口 | 环境里设置了 `ELECTRON_RUN_AS_NODE=1`，Electron 会以 Node 模式运行 | `npm run dev` 已通过 `scripts/dev.mjs` 自动清掉；也可手动 `Remove-Item Env:ELECTRON_RUN_AS_NODE` 后重试；仍无窗口看 `apps/desktop/electron-main.log` |
 | 云 API 生图报模型/接口错误 | 填了聊天模型（如 `kimi-k3`），或该代理不支持 `images/generations` | 换图像模型（`gpt-image-1`/`flux`/`seedream`）或改用 ComfyUI |
 
 说明：桌面端只依赖 `/api/v1` 接口，不直接访问数据库；后端地址可用 `VITE_API_BASE_URL` 覆盖。

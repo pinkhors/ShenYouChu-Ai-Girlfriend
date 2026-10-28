@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseAsrRequest, transcribe } from './asr'
 import { generateImage, parseImageRequest } from './imagegen'
@@ -18,6 +19,28 @@ import { parseTtsRequest, synthesize } from './tts'
 
 const WINDOW_WIDTH = 1280
 const WINDOW_HEIGHT = 800
+
+/** 启动日志：Electron 静默退出时用它定位卡在哪一步。 */
+const MAIN_LOG = join(process.cwd(), 'electron-main.log')
+
+function mainLog(message: string): void {
+  const line = `${new Date().toISOString()} ${message}`
+  console.log(`[main] ${message}`)
+  try {
+    appendFileSync(MAIN_LOG, `${line}\n`)
+  } catch {
+    /* 日志写失败不影响启动 */
+  }
+}
+
+process.on('uncaughtException', (error) => {
+  mainLog(`uncaughtException: ${error.stack ?? error.message}`)
+})
+process.on('unhandledRejection', (reason) => {
+  mainLog(`unhandledRejection: ${String(reason)}`)
+})
+
+mainLog(`module loaded; execPath=${process.execPath}; runAsNode=${process.env.ELECTRON_RUN_AS_NODE ?? ''}`)
 
 /* 出图通道：渲染进程只传参数，网络请求与密钥使用都在主进程完成 */
 ipcMain.handle('imagegen:generate', async (_event, payload: unknown): Promise<string> => {
@@ -45,6 +68,7 @@ function isAppOrigin(url: string): boolean {
 }
 
 function createMainWindow(): BrowserWindow {
+  mainLog('creating BrowserWindow')
   const mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -59,13 +83,24 @@ function createMainWindow(): BrowserWindow {
       sandbox: true
     }
   })
+  mainLog('BrowserWindow created')
+  mainWindow.center()
+  setTimeout(() => {
+    mainLog(
+      `window state visible=${mainWindow.isVisible()} minimized=${mainWindow.isMinimized()} ` +
+        `bounds=${JSON.stringify(mainWindow.getBounds())}`
+    )
+  }, 2000)
 
   /* 渲染进程的导航事件打到终端，便于排查 loadURL / loadFile 失败 */
   mainWindow.webContents.on('did-finish-load', () => {
-    console.log('[desktop] 渲染进程加载完成：', mainWindow.webContents.getURL())
+    mainLog(`renderer loaded: ${mainWindow.webContents.getURL()}`)
   })
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-    console.error('[desktop] 渲染进程加载失败：', { errorCode, errorDescription, validatedURL })
+    mainLog(`renderer load failed: ${errorCode} ${errorDescription} ${validatedURL}`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    mainLog(`renderer gone: ${details.reason} exitCode=${details.exitCode}`)
   })
 
   /**
@@ -82,6 +117,7 @@ function createMainWindow(): BrowserWindow {
 
   /* 先隐藏、渲染就绪后再显示，避免白屏闪烁 */
   mainWindow.once('ready-to-show', () => {
+    mainLog('ready-to-show; showing window')
     mainWindow.show()
   })
 
@@ -119,18 +155,24 @@ function createMainWindow(): BrowserWindow {
   return mainWindow
 }
 
-void app.whenReady().then(() => {
-  createMainWindow()
+void app.whenReady()
+  .then(() => {
+    mainLog('app ready')
+    createMainWindow()
 
-  /* macOS：点击 Dock 图标且无窗口时重新创建 */
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow()
-    }
+    /* macOS：点击 Dock 图标且无窗口时重新创建 */
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createMainWindow()
+      }
+    })
   })
-})
+  .catch((error: unknown) => {
+    mainLog(`app.whenReady failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+  })
 
 app.on('window-all-closed', () => {
+  mainLog('all windows closed')
   /* macOS 之外的平台在全部窗口关闭后退出 */
   if (process.platform !== 'darwin') {
     app.quit()

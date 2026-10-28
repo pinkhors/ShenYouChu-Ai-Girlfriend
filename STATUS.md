@@ -722,3 +722,11 @@ DEMO VERIFICATION PASSED: all 4 steps
 - README 增加对应故障排查行。
 
 验证：`node --check scripts/dev.mjs`、`tsc --noEmit` 通过；未实际启动窗口（沙箱无法 GUI）。无 SQL 变更。
+
+## Round 40：主进程启动日志（2026-10-28）
+
+- 主进程增加 `apps/desktop/electron-main.log`：记录模块加载（含 execPath / ELECTRON_RUN_AS_NODE）、app ready、窗口创建、ready-to-show、加载成功/失败、renderer gone、窗口状态与异常；
+- 窗口创建后 `center()`，避免多显示器下出现在屏幕外；
+- 用于定位“停在 start electron app... 无窗口”的具体阶段。
+
+验证：`tsc --noEmit` exit 0。无 SQL 变更。
