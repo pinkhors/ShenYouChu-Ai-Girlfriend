@@ -16,6 +16,8 @@
     "src/renderer/src/api/sse.ts",
     "src/renderer/src/api/encoding.ts",
     "src/renderer/src/api/turnStream.ts",
-    "src/renderer/src/auth/tokenStore.ts"
+    "src/renderer/src/auth/tokenStore.ts",
+    "src/renderer/src/avatar/avatarConfig.ts",
+    "src/renderer/src/avatar/avatarStorage.ts"
   ]
 }

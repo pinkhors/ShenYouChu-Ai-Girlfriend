@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { ApiError, listActivityEvents, type ActivityEventView } from './api/client'
+import Icon from './ui/Icon'
+import { formatTime } from './ui/time'
 
 const TYPE_OPTIONS = [
   { value: '', label: '全部类型' },
@@ -9,11 +11,6 @@ const TYPE_OPTIONS = [
   { value: 'auth.login', label: '登录' },
   { value: 'conversation.created', label: '创建会话' }
 ]
-
-function formatTime(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
-}
 
 function toMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -45,22 +42,25 @@ export default function ActivityPanel() {
     void load(type)
   }, [load, type])
 
-  const handleTypeChange = (event: ChangeEvent<HTMLSelectElement>) => {
+  const handleTypeChange = (event: ChangeEvent<HTMLSelectElement>): void => {
     setType(event.target.value)
   }
 
   return (
-    <section className="panel">
-      <div className="panel__header">
-        <h2 className="panel__title">活动记录</h2>
-        <select className="field__input" value={type} onChange={handleTypeChange} disabled={isLoading}>
+    <section className="page" aria-label="活动记录">
+      <header className="page__header">
+        <div>
+          <h1 className="page__title">活动记录</h1>
+          <p className="page__subtitle">只读时间线：你、她与系统发生过的事。</p>
+        </div>
+        <select className="select" value={type} onChange={handleTypeChange} disabled={isLoading}>
           {TYPE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
-      </div>
+      </header>
 
       {error !== null && (
         <p className="alert" role="alert">
@@ -71,20 +71,25 @@ export default function ActivityPanel() {
       {isLoading && events.length === 0 ? (
         <p className="muted">正在加载活动记录…</p>
       ) : events.length === 0 ? (
-        <p className="muted">暂无活动记录。</p>
+        <div className="empty-card">
+          <Icon name="pulse" size={28} />
+          <p className="empty-card__title">暂无活动记录</p>
+          <p className="muted">登录、发消息、生成记忆等操作会记录在这里。</p>
+        </div>
       ) : (
-        <ul className="activity-list">
+        <ol className="timeline">
           {events.map((event) => (
-            <li className="activity-item" key={event.id}>
-              <div className="activity-item__main">
-                <span>{event.eventType}</span>
-                <span className="activity-item__meta">
+            <li className="timeline__item" key={event.id}>
+              <span className="timeline__dot" aria-hidden="true" />
+              <div className="timeline__body">
+                <p className="timeline__title">{event.eventType}</p>
+                <p className="timeline__meta">
                   {event.actor} · {event.source} · {formatTime(event.occurredAt)}
-                </span>
+                </p>
               </div>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
     </section>
   )

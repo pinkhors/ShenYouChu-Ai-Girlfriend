@@ -191,9 +191,8 @@ export function me(): Promise<UserView> {
 }
 
 /**
- * 当前用户的会话列表。
- * 契约文档 3.2 记为 cursor 分页，但当前后端 ConversationController 直接返回数组
- * （List<ConversationView>）；此处按既有实现对接，后端改为分页信封时同步调整。
+ * 当前用户的会话列表（cursor 分页，最新在前）。
+ * 契约为 `{ items, nextCursor }`，与消息列表一致。
  */
 export interface ConversationPage {
   readonly items: Conversation[]

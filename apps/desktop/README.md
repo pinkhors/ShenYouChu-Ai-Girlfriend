@@ -2,6 +2,8 @@
 
 Electron + React + TypeScript 桌面客户端。当前为 **M1：登录、会话增删查、会话内消息与 SSE 流式回复、记忆列表、活动记录**，语音、视觉、Live2D 仅保留挂载点与 TODO 注释。
 
+界面已改为**微信式三栏布局**（左侧导航 / 会话列表 / 主内容区），并在「形象」页提供**捏脸编辑器**：肤色、脸型、发型发色、五官、妆容与穿搭可调，带 4 套预设与随机/恢复默认，参数保存在本机并按用户隔离。形象目前用分层 SVG 做半写实预览，尚未接入生成式写实渲染。
+
 ## 前置条件
 
 后端必须先启动并监听 **48080**（`services/core`，`SERVER_PORT` 默认 48080，接口前缀 `/api/v1`）：
@@ -64,12 +66,13 @@ cd apps\desktop
 npm test
 ```
 
-覆盖内容（18 个用例）：
+覆盖内容（27 个用例）：
 
 - SSE 帧解析（`event:` / `data:` 多行、无 data 帧、JSON 字段提取、非法 JSON 容错）；
 - 流式拼帧（一帧跨多次 push、一次 push 多帧、结尾残留半帧、未知事件忽略）；
 - UTF-8 Base64 编解码（中文、emoji、空串，与 Node `Buffer` 结果对齐）；
-- token 存储（读写往返、损坏 JSON、结构不符、清空、存储被禁用时降级为未登录）。
+- token 存储（读写往返、损坏 JSON、结构不符、清空、存储被禁用时降级为未登录）；
+- 形象参数（脏数据归一化与数值夹取、预设合法性、可复现随机、按用户隔离的本地存储、损坏数据降级）。
 
 原理：`tsc -p tsconfig.test.json` 编译到 `out-tsc/`，脚本在其中写入 `{"type":"commonjs"}`
 标记（因为包本身是 `"type": "module"`），再用 `node --test` 运行。因此这些测试在受限环境
@@ -88,13 +91,29 @@ apps/desktop/
     └── renderer/
         ├── index.html
         └── src/
-            ├── main.tsx         # 渲染进程入口
-            ├── App.tsx          # 登录/注册 + 会话列表（全部中文文案）
-            ├── env.d.ts         # vite/client 与 window.desktop 类型声明
-            ├── styles.css       # 深色基础样式（无外部字体/图片）
-            ├── api/client.ts    # REST 封装与类型定义
-            └── auth/tokenStore.ts
+            ├── main.tsx              # 渲染进程入口
+            ├── App.tsx               # 登录/注册 + 微信式工作区与路由
+            ├── ConversationSidebar.tsx  # 会话列表（搜索/新建/删除）
+            ├── ChatView.tsx          # 会话详情：历史消息、SSE 流式、语音占位
+            ├── MemoryPanel.tsx       # 记忆页
+            ├── ActivityPanel.tsx     # 活动记录页
+            ├── SettingsPanel.tsx     # 设置页（账户/形象/连接/危险操作）
+            ├── avatar/               # 捏脸：参数模型、SVG 渲染、编辑器、本地存储
+            ├── ui/                   # 内联图标与时间格式
+            ├── api/client.ts         # REST 封装与类型定义
+            ├── env.d.ts              # vite/client 与 window.desktop 类型声明
+            └── styles.css            # 微信式浅色主题（无外部字体/图片）
 ```
+
+## 界面与捏脸（本机）
+
+- **布局**：左侧深色导航栏（聊天 / 形象 / 记忆 / 活动 / 设置）→ 会话列表 → 主内容区；窄窗口下隐藏右侧关系胶囊，编辑页改为单列。
+- **捏脸**：`avatar/avatarConfig.ts` 定义 13 个参数（枚举 + 0..1 连续值），`GirlfriendAvatar` 用分层 SVG 渲染半写实预览；`AvatarEditor` 提供色板、滑杆、分段选择、4 套预设、随机与恢复默认。
+- **持久化**：按用户写入 `localStorage`（key `shenyouchu.avatar.v1.<userId>`），不新增后端接口；换设备不同步，删除账号时同步清除本机形象。
+- **可替换渲染**：编辑器只依赖 `AvatarConfig`；接入生成式写实渲染（本地 SD/ComfyUI 或商用数字人）时替换 `GirlfriendAvatar`，参数与存储不变。
+
+> 说明：这里的“半写实”目前是矢量预览，不是真人级生成；照片/视频克隆真人形象涉及肖像权与深度合成标识，未纳入本期。
+
 
 ## 关键设计选择
 
@@ -102,16 +121,18 @@ apps/desktop/
 - **预加载用 CJS**：`package.json` 为 `"type": "module"`，而 Electron 在 `sandbox: true` 下不支持 ESM 预加载脚本，因此 `electron.vite.config.ts` 显式把 preload 构建为 `out/preload/index.cjs`（主进程按该文件名加载）。
 - **主进程路径用 `app.getAppPath()`**：主进程产物是 ESM，没有 `__dirname`，所以 preload 与生产 `index.html` 都基于 `app.getAppPath()` 解析。
 - **凭证存储**：M0 用 `localStorage`（可刷新恢复、零 IPC），后续改为主进程 `safeStorage`；`tokenStore` 的 get/set/clear 签名保持不变即可平滑迁移。
-- **接口对齐现有后端**：按 `services/core` 的实际实现对接（`/api/v1` 前缀；消息列表已按 cursor 分页，会话列表当前仍返回数组；错误体为 `{ code, message, requestId }`）。
+- **接口对齐现有后端**：按 `services/core` 的实际实现对接（`/api/v1` 前缀；会话与消息列表均已按 cursor 分页，信封为 `{ items, nextCursor }`；错误体为 `{ code, message, requestId }`）。
 - **不设置 renderer `base`**：electron-vite 在生产构建时会自动把渲染进程 `base` 置为 `'./'`，使 `file://` 下的资源相对路径可用；显式覆盖反而会触发告警。
 - **不引入** UI 库、状态库、路由库；不使用 `any`，不安全处用 `unknown` 收窄；所有事件处理器显式标注类型。
 
 ## 遗留项
 
+- **写实渲染未接入**：捏脸目前是本机 SVG 预览，参数已就绪；接入生成模型后替换 `GirlfriendAvatar` 即可；
+- **不接微信/QQ**：个人微信与 QQ 没有官方聊天/通话 API，非官方 hook 违反平台协议；若要“在微信里用”，需走微信小程序路线（本期未做）；
 - TODO(M2 视觉)、TODO(M3 Live2D)：仅注释占位，未实现；语音为 M2 占位链路（文本 Base64 → ASR → 轮次 → TTS），真实模型接入见 docs/05；
 - TODO(M3 安全存储)：`tokenStore` 迁移到 `safeStorage` + 受限 IPC；
 - 生产构建后按需补严格 CSP（`index.html` 现无 CSP meta，因为开发期 React Refresh 需要内联脚本）；
-- 会话列表接口目前返回数组、契约文档 3.2 写的是 cursor 分页（消息列表已按 cursor 分页实现），需后端或文档择一收敛；
+- 形象参数只在本机保存，多端同步需要后端新增 profile 表与接口；
 
 ## 本机联调步骤与故障排查
 

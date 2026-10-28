@@ -17,18 +17,26 @@ import {
   type UserView
 } from './api/client'
 import * as tokenStore from './auth/tokenStore'
-import ConversationPanel from './ConversationPanel'
-import MemoryPanel from './MemoryPanel'
 import ActivityPanel from './ActivityPanel'
+import AvatarEditor from './avatar/AvatarEditor'
+import GirlfriendAvatar from './avatar/GirlfriendAvatar'
+import { DEFAULT_AVATAR, type AvatarConfig } from './avatar/avatarConfig'
+import { clearAvatar, getAvatar, saveAvatar } from './avatar/avatarStorage'
+import ChatView from './ChatView'
+import ConversationSidebar from './ConversationSidebar'
+import MemoryPanel from './MemoryPanel'
+import SettingsPanel from './SettingsPanel'
+import Icon, { type IconName } from './ui/Icon'
 
 /**
- * 应用根组件：未登录显示登录/注册卡片，已登录显示会话管理界面。
+ * 应用根组件：未登录显示登录/注册页，已登录显示微信式三栏工作区。
  *
- * 范围（M0）：认证 + 会话增删查。
- * 未实现（仅留 TODO，见文件末尾）：语音、视觉、Live2D。
+ * 布局：左侧导航栏（聊天 / 形象 / 记忆 / 活动 / 设置）→ 会话列表 → 主内容区。
+ * 形象（捏脸）参数保存在本机，不参与后端契约；其余数据仍走 /api/v1。
  */
 
 type AuthMode = 'login' | 'register'
+type Section = 'chats' | 'look' | 'memories' | 'activity' | 'settings'
 
 interface AuthFormState {
   readonly mode: AuthMode
@@ -46,16 +54,12 @@ const INITIAL_AUTH_STATE: AuthFormState = {
   errorMessage: null
 }
 
-const timeFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' })
-
-/** 后端时间为 ISO-8601 字符串；无法解析时给出占位文案而不是 Invalid Date。 */
-function formatTime(value: string | null): string {
-  if (value === null) {
-    return '时间未知'
-  }
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? '时间未知' : timeFormatter.format(parsed)
-}
+const NAV_ITEMS: readonly { readonly id: Section; readonly label: string; readonly icon: IconName }[] = [
+  { id: 'chats', label: '聊天', icon: 'chat' },
+  { id: 'look', label: '形象', icon: 'sparkles' },
+  { id: 'memories', label: '记忆', icon: 'book' },
+  { id: 'activity', label: '活动', icon: 'pulse' }
+]
 
 /** 把 unknown 异常转成可展示的中文文案（网络层失败与业务错误分开表述）。 */
 function describeError(error: unknown, fallbackMessage: string): string {
@@ -74,6 +78,22 @@ function describeError(error: unknown, fallbackMessage: string): string {
   return fallbackMessage
 }
 
+function EmptyChat({ avatar, onCreate }: { readonly avatar: AvatarConfig; readonly onCreate: () => void }) {
+  return (
+    <section className="empty-chat">
+      <div className="empty-chat__portrait">
+        <GirlfriendAvatar config={avatar} />
+      </div>
+      <h1 className="empty-chat__title">沈幼楚在这里</h1>
+      <p className="muted">从左侧选择一个会话，或者开始一次新的聊天。</p>
+      <button className="btn btn--primary" type="button" onClick={onCreate}>
+        <Icon name="plus" size={16} />
+        新建会话
+      </button>
+    </section>
+  )
+}
+
 export default function App() {
   const [auth, setAuth] = useState<AuthFormState>(INITIAL_AUTH_STATE)
   /* 先读本地缓存让界面立刻可用，随后用 /auth/me 校正 */
@@ -82,15 +102,15 @@ export default function App() {
   )
   const [isBootstrapping, setIsBootstrapping] = useState<boolean>(() => tokenStore.getToken() !== null)
 
+  const [section, setSection] = useState<Section>('chats')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversationError, setConversationError] = useState<string | null>(null)
   const [isLoadingConversations, setIsLoadingConversations] = useState(false)
-  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
-  const [newConversationTitle, setNewConversationTitle] = useState('')
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
-  const [view, setView] = useState<'conversations' | 'memories' | 'activity'>('conversations')
   const [characterState, setCharacterState] = useState<CharacterState | null>(null)
+  const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR)
+  const [accountError, setAccountError] = useState<string | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
   useEffect(() => {
@@ -98,6 +118,9 @@ export default function App() {
       tokenStore.clear()
       setUser(null)
       setConversations([])
+      setActiveConversation(null)
+      setCharacterState(null)
+      setSection('chats')
       setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '登录状态已失效，请重新登录' })
     })
 
@@ -106,7 +129,7 @@ export default function App() {
     }
   }, [])
 
-  /* 关系状态：登录后加载；从会话详情返回时刷新（一轮对话会改变心情/亲密度） */
+  /* 关系状态：登录后加载；切换会话时刷新（一轮对话会改变心情/亲密度） */
   useEffect(() => {
     if (user === null) {
       setCharacterState(null)
@@ -126,6 +149,15 @@ export default function App() {
       cancelled = true
     }
   }, [user, activeConversation])
+
+  /* 形象：登录后从本机读取；退出时回到默认，避免下一位用户看到上一位的形象 */
+  useEffect(() => {
+    if (user === null) {
+      setAvatar(DEFAULT_AVATAR)
+      return
+    }
+    setAvatar(getAvatar(user.id))
+  }, [user])
 
   /* 启动时校验本地令牌：失败即视为未登录，不做静默降级 */
   useEffect(() => {
@@ -188,6 +220,23 @@ export default function App() {
     void refreshConversations()
   }, [user, refreshConversations])
 
+  /* 首次进入自动选中最近的会话；当前会话被删除时回到空态 */
+  useEffect(() => {
+    if (user === null) {
+      return
+    }
+    if (activeConversation !== null) {
+      const stillExists = conversations.some((item) => item.id === activeConversation.id)
+      if (!stillExists && !isLoadingConversations) {
+        setActiveConversation(null)
+      }
+      return
+    }
+    if (section === 'chats' && conversations.length > 0) {
+      setActiveConversation(conversations[0] ?? null)
+    }
+  }, [conversations, activeConversation, isLoadingConversations, section, user])
+
   const handleModeChange = (mode: AuthMode): void => {
     setAuth((previous) => ({ ...previous, mode, errorMessage: null }))
   }
@@ -221,6 +270,7 @@ export default function App() {
       tokenStore.setUser(response.user)
       setUser(response.user)
       setAuth({ ...INITIAL_AUTH_STATE, mode: auth.mode })
+      setSection('chats')
     } catch (error) {
       setAuth((previous) => ({
         ...previous,
@@ -240,6 +290,9 @@ export default function App() {
       tokenStore.clear()
       setUser(null)
       setConversations([])
+      setActiveConversation(null)
+      setCharacterState(null)
+      setSection('chats')
       setAuth(INITIAL_AUTH_STATE)
     }
   }
@@ -251,38 +304,38 @@ export default function App() {
     if (!confirmed) {
       return
     }
+    setAccountError(null)
+    const currentUserId = user?.id ?? null
     try {
       await deleteAccount()
     } catch (error) {
-      setConversationError(describeError(error, '删除账号失败，请稍后重试'))
+      setAccountError(describeError(error, '删除账号失败，请稍后重试'))
       return
+    }
+    if (currentUserId !== null) {
+      clearAvatar(currentUserId)
     }
     tokenStore.clear()
     setUser(null)
     setConversations([])
     setCharacterState(null)
     setActiveConversation(null)
+    setSection('chats')
     setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '账号已删除，感谢你的陪伴' })
   }
 
-  const handleNewConversationTitleChange = (event: ChangeEvent<HTMLInputElement>): void => {
-    setNewConversationTitle(event.target.value)
-  }
-
-  const handleCreateConversation = async (): Promise<void> => {
-    const title = newConversationTitle.trim()
-
-    setIsCreatingConversation(true)
+  const handleCreateConversation = async (title: string): Promise<boolean> => {
     setConversationError(null)
     try {
       const created = await createConversation(title === '' ? {} : { title })
-      setNewConversationTitle('')
       /* 新会话置顶，避免用户创建后还要滚动查找 */
       setConversations((previous) => [created, ...previous])
+      setActiveConversation(created)
+      setSection('chats')
+      return true
     } catch (error) {
       setConversationError(describeError(error, '创建会话失败'))
-    } finally {
-      setIsCreatingConversation(false)
+      return false
     }
   }
 
@@ -297,6 +350,9 @@ export default function App() {
     try {
       await deleteConversation(conversation.id)
       setConversations((previous) => previous.filter((item) => item.id !== conversation.id))
+      if (activeConversation?.id === conversation.id) {
+        setActiveConversation(null)
+      }
     } catch (error) {
       setConversationError(describeError(error, '删除会话失败'))
     } finally {
@@ -304,9 +360,25 @@ export default function App() {
     }
   }
 
+  const handleSaveAvatar = (next: AvatarConfig): void => {
+    if (user === null) {
+      return
+    }
+    saveAvatar(user.id, next)
+    setAvatar(next)
+  }
+
+  const handleResetAvatar = (): void => {
+    if (user !== null) {
+      clearAvatar(user.id)
+    }
+    setAvatar(DEFAULT_AVATAR)
+  }
+
   if (isBootstrapping) {
     return (
-      <div className="app app--centered">
+      <div className="boot">
+        <span className="boot__dot" />
         <p className="muted">正在校验登录状态…</p>
       </div>
     )
@@ -316,10 +388,28 @@ export default function App() {
     const isRegisterMode = auth.mode === 'register'
 
     return (
-      <main className="app app--centered">
-        <section className="card">
-          <h1 className="card__title">沈幼楚 · 桌面客户端</h1>
-          <p className="card__subtitle">后端地址：{API_BASE}</p>
+      <main className="auth">
+        <section className="auth__visual" aria-hidden="true">
+          <div className="auth__portrait">
+            <GirlfriendAvatar config={DEFAULT_AVATAR} />
+          </div>
+          <div className="auth__caption">
+            <p className="auth__eyebrow">SHEN YOU CHU</p>
+            <h1 className="auth__name">沈幼楚</h1>
+            <p className="auth__line">会记得你、也会闹点小脾气的插画师。</p>
+          </div>
+          <div className="auth__chips">
+            <span className="chip chip--light">温柔小傲娇</span>
+            <span className="chip chip--light">插画师</span>
+            <span className="chip chip--light">在线</span>
+          </div>
+        </section>
+
+        <section className="auth__panel">
+          <div className="auth__brand">
+            <span className="auth__mark">幼</span>
+            <span>沈幼楚 · 桌面客户端</span>
+          </div>
 
           <div className="tabs" role="tablist" aria-label="登录或注册">
             <button
@@ -385,196 +475,125 @@ export default function App() {
               </p>
             )}
 
-            <button className="button button--primary" type="submit" disabled={auth.isSubmitting}>
+            <button className="btn btn--primary btn--block" type="submit" disabled={auth.isSubmitting}>
               {auth.isSubmitting ? '处理中…' : isRegisterMode ? '注册并进入' : '登录'}
             </button>
           </form>
 
-          <p className="card__hint">
-            {isRegisterMode
-              ? '注册成功后会直接进入，并可创建与沈幼楚的会话。'
-              : '还没有账号？切到「注册」创建一个。'}
+          <p className="auth__hint">
+            {isRegisterMode ? '注册成功后会直接进入，并可创建与沈幼楚的会话。' : '还没有账号？切到「注册」创建一个。'}
+          </p>
+          <p className="auth__endpoint" title={API_BASE}>
+            后端：{API_BASE}
           </p>
         </section>
       </main>
     )
   }
 
-  if (activeConversation !== null) {
-    return (
-      <ConversationPanel
-        conversation={activeConversation}
-        onBack={() => {
-          setActiveConversation(null)
-        }}
-      />
-    )
-  }
-
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="topbar__identity">
-          <span className="topbar__name">{user.username}</span>
-          <span className="badge">{user.role}</span>
-          {characterState !== null && (
-            <span className="badge">
-              心情 {characterState.mood} · 亲密 {characterState.intimacy}
-            </span>
-          )}
-        </div>
-        <div className="topbar__actions">
-          <div className="identity-nav">
-            <button
-              className={view === 'conversations' ? 'button button--primary' : 'button button--ghost'}
-              type="button"
-              onClick={() => {
-                setView('conversations')
-              }}
-            >
-              会话
-            </button>
-            <button
-              className={view === 'memories' ? 'button button--primary' : 'button button--ghost'}
-              type="button"
-              onClick={() => {
-                setView('memories')
-              }}
-            >
-              记忆
-            </button>
-            <button
-              className={view === 'activity' ? 'button button--primary' : 'button button--ghost'}
-              type="button"
-              onClick={() => {
-                setView('activity')
-              }}
-            >
-              活动
-            </button>
-          </div>
-          <span className="topbar__endpoint" title={API_BASE}>
-            后端：{API_BASE}
-          </span>
-          <button
-            className="button button--ghost"
-            type="button"
-            onClick={() => {
-              void handleLogout()
-            }}
-          >
-            退出登录
-          </button>
-          <button
-            className="button button--danger"
-            type="button"
-            onClick={() => {
-              void handleDeleteAccount()
-            }}
-          >
-            删除账号
-          </button>
-        </div>
-      </header>
+    <div className="workspace">
+      <nav className="rail" aria-label="主导航">
+        <button
+          className="rail__me"
+          type="button"
+          title={`${user.username} · 打开设置`}
+          aria-label="打开设置"
+          onClick={() => {
+            setSection('settings')
+          }}
+        >
+          <GirlfriendAvatar config={avatar} variant="avatar" />
+        </button>
 
-      <main className="workspace">
-        {view === 'memories' ? (
+        <div className="rail__nav">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={section === item.id ? 'rail__item rail__item--active' : 'rail__item'}
+              aria-current={section === item.id ? 'page' : undefined}
+              onClick={() => {
+                setSection(item.id)
+              }}
+            >
+              <Icon name={item.icon} size={22} />
+              <span className="rail__label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="rail__spacer" />
+
+        <button
+          className={section === 'settings' ? 'rail__item rail__item--active' : 'rail__item'}
+          type="button"
+          aria-current={section === 'settings' ? 'page' : undefined}
+          onClick={() => {
+            setSection('settings')
+          }}
+        >
+          <Icon name="settings" size={22} />
+          <span className="rail__label">设置</span>
+        </button>
+      </nav>
+
+      {section === 'chats' && (
+        <ConversationSidebar
+          conversations={conversations}
+          activeId={activeConversation?.id ?? null}
+          isLoading={isLoadingConversations}
+          error={conversationError}
+          deletingId={deletingConversationId}
+          avatar={avatar}
+          onSelect={setActiveConversation}
+          onCreate={handleCreateConversation}
+          onDelete={(conversation) => {
+            void handleDeleteConversation(conversation)
+          }}
+          onRefresh={() => {
+            void refreshConversations()
+          }}
+        />
+      )}
+
+      <main className="main">
+        {section === 'chats' ? (
+          activeConversation !== null ? (
+            <ChatView
+              key={activeConversation.id}
+              conversation={activeConversation}
+              avatar={avatar}
+              characterState={characterState}
+              userName={user.username}
+            />
+          ) : (
+            <EmptyChat
+              avatar={avatar}
+              onCreate={() => {
+                void handleCreateConversation('')
+              }}
+            />
+          )
+        ) : section === 'look' ? (
+          <AvatarEditor config={avatar} onSave={handleSaveAvatar} />
+        ) : section === 'memories' ? (
           <MemoryPanel />
-        ) : view === 'activity' ? (
+        ) : section === 'activity' ? (
           <ActivityPanel />
         ) : (
-        <section className="panel">
-          <div className="panel__header">
-            <h2 className="panel__title">我的会话</h2>
-            <button
-              className="button button--ghost"
-              type="button"
-              disabled={isLoadingConversations}
-              onClick={() => {
-                void refreshConversations()
-              }}
-            >
-              {isLoadingConversations ? '刷新中…' : '刷新'}
-            </button>
-          </div>
-
-          <div className="creator">
-            <input
-              className="field__input"
-              type="text"
-              placeholder="新会话标题（可留空）"
-              maxLength={200}
-              value={newConversationTitle}
-              onChange={handleNewConversationTitleChange}
-              disabled={isCreatingConversation}
-            />
-            <button
-              className="button button--primary"
-              type="button"
-              disabled={isCreatingConversation}
-              onClick={() => {
-                void handleCreateConversation()
-              }}
-            >
-              {isCreatingConversation ? '创建中…' : '创建会话'}
-            </button>
-          </div>
-
-          {conversationError !== null && (
-            <p className="alert" role="alert">
-              {conversationError}
-            </p>
-          )}
-
-          {isLoadingConversations && conversations.length === 0 ? (
-            <p className="muted">正在加载会话…</p>
-          ) : conversations.length === 0 ? (
-            <p className="muted">还没有会话，先创建一个开始对话。</p>
-          ) : (
-            <ul className="conversations">
-              {conversations.map((conversation) => (
-                <li className="conversation" key={conversation.id}>
-                  <div className="conversation__main">
-                    <span className="conversation__title">{conversation.title ?? '未命名会话'}</span>
-                    <span className="conversation__meta">
-                      {conversation.lastMessageAt === null
-                        ? `创建于 ${formatTime(conversation.createdAt)}`
-                        : `最近消息 ${formatTime(conversation.lastMessageAt)}`}
-                      {' · '}
-                      {conversation.status}
-                    </span>
-                  </div>
-                  <button
-                    className="button button--ghost"
-                    type="button"
-                    onClick={() => {
-                      setActiveConversation(conversation)
-                    }}
-                  >
-                    进入
-                  </button>
-                  <button
-                    className="button button--danger"
-                    type="button"
-                    disabled={deletingConversationId === conversation.id}
-                    onClick={() => {
-                      void handleDeleteConversation(conversation)
-                    }}
-                  >
-                    {deletingConversationId === conversation.id ? '删除中…' : '删除'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/*
-            后续里程碑的挂载点（当前仅占位，不实现）：
-            - TODO(M1 语音)：会话内 ASR/TTS 控制条与「可听首音」耗时埋点；
-            - TODO(M2 视觉)：摄像头授权入口、视觉信号开关与本地预览（低置信度信号不入提示词）；
-            - TODO(M3 Live2D)：沈幼楚立绘渲染层，命令式挂载以避免整树重渲染。
-          */}
-        </section>
+          <SettingsPanel
+            user={user}
+            apiBase={API_BASE}
+            onLogout={() => {
+              void handleLogout()
+            }}
+            onDeleteAccount={() => {
+              void handleDeleteAccount()
+            }}
+            onResetAvatar={handleResetAvatar}
+            error={accountError}
+          />
         )}
       </main>
     </div>
