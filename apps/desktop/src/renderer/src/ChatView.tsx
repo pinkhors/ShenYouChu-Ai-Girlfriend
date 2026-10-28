@@ -9,6 +9,13 @@ import {
   type Message
 } from './api/client'
 import type { AvatarConfig } from './avatar/avatarConfig'
+import {
+  createPendingUserMessage,
+  newestMessageId,
+  reconcilePending,
+  toDisplayMessage,
+  type PendingUserMessage
+} from './chat/pendingMessages'
 import AvatarPortrait from './portrait/AvatarPortrait'
 import { resolvePortrait, type PortraitSet } from './portrait/expression'
 import Icon from './ui/Icon'
@@ -51,6 +58,7 @@ export default function ChatView({
   onCall
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [pending, setPending] = useState<PendingUserMessage[]>([])
   const [draft, setDraft] = useState('')
   const [streamingText, setStreamingText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +76,8 @@ export default function ChatView({
     try {
       const page = await listMessages(conversation.id)
       setMessages(page.items)
+      /* 服务端已落库的消息会顶替本地占位，避免重复展示 */
+      setPending((previous) => reconcilePending(previous, page.items))
       setNextCursor(page.nextCursor)
       setError(null)
     } catch (loadError) {
@@ -78,6 +88,8 @@ export default function ChatView({
   }, [conversation.id])
 
   useEffect(() => {
+    /* 切换会话时丢弃上一个会话的本地占位消息 */
+    setPending([])
     void load()
     return () => {
       abortRef.current?.abort()
@@ -86,7 +98,7 @@ export default function ChatView({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, streamingText])
+  }, [messages, pending, streamingText, isSending])
 
   const handleLoadMore = async (): Promise<void> => {
     if (nextCursor === null || isLoadingMore) {
@@ -99,6 +111,7 @@ export default function ChatView({
         const seen = new Set(previous.map((item) => item.id))
         return [...previous, ...page.items.filter((item) => !seen.has(item.id))]
       })
+      setPending((previous) => reconcilePending(previous, page.items))
       setNextCursor(page.nextCursor)
     } catch (loadError) {
       setError(toMessage(loadError))
@@ -113,10 +126,13 @@ export default function ChatView({
       return
     }
 
+    const pendingMessage = createPendingUserMessage(text, newestMessageId(messages))
     setDraft('')
     setError(null)
     setStreamingText('')
     setIsSending(true)
+    /* 先本地占位：不等服务端落库，用户消息立刻出现在会话里 */
+    setPending((previous) => [...previous, pendingMessage])
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -142,12 +158,17 @@ export default function ChatView({
         controller.signal
       )
     } catch (sendError) {
-      if (!(sendError instanceof DOMException && sendError.name === 'AbortError')) {
+      if (sendError instanceof DOMException && sendError.name === 'AbortError') {
+        /* 用户主动停止：服务端可能已落库，回源对齐 */
+        void load()
+      } else {
         setError(toMessage(sendError))
-        /* 失败时回源一次，避免用户消息只存在于本地 */
         if (!started) {
-          void load()
+          /* 尚未落库：撤回占位消息并把文本放回输入框，便于重发 */
+          setPending((previous) => previous.filter((item) => item.localId !== pendingMessage.localId))
+          setDraft((current) => (current === '' ? text : current))
         }
+        void load()
       }
     } finally {
       setIsSending(false)
@@ -179,8 +200,11 @@ export default function ChatView({
     void sendMessage()
   }
 
-  const isEmpty = messages.length === 0 && streamingText === ''
-  const hasMessages = messages.length > 0 || streamingText !== ''
+  const pendingItems = pending.map(toDisplayMessage)
+  const timeline: Message[] = [...messages, ...pendingItems]
+  const pendingIds = new Set(pendingItems.map((item) => item.id))
+  const isEmpty = timeline.length === 0 && streamingText === ''
+  const hasMessages = timeline.length > 0 || streamingText !== '' || isSending
   const heroSource = heroImage ?? resolvePortrait(portraits, 'neutral')
 
   return (
@@ -291,10 +315,16 @@ export default function ChatView({
           </div>
         ) : hasMessages ? (
           <ul className="messages">
-            {messages.map((message) => {
+            {timeline.map((message) => {
               const isUser = message.role === 'user'
+              const isPending = pendingIds.has(message.id)
               return (
-                <li className={isUser ? 'message message--user' : 'message message--assistant'} key={message.id}>
+                <li
+                  className={`${isUser ? 'message message--user' : 'message message--assistant'}${
+                    isPending ? ' message--pending' : ''
+                  }`}
+                  key={message.id}
+                >
                   {isUser ? (
                     <span className="bubble-avatar bubble-avatar--user" aria-hidden="true">
                       {userName.slice(0, 1).toUpperCase()}
@@ -313,6 +343,20 @@ export default function ChatView({
                 </li>
               )
             })}
+            {isSending && streamingText === '' && (
+              <li className="message message--assistant">
+                <span className="bubble-avatar">
+                  <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
+                </span>
+                <div className="bubble bubble--assistant bubble--typing" role="status" aria-label="沈幼楚正在输入…">
+                  <span className="typing" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
+              </li>
+            )}
             {streamingText !== '' && (
               <li className="message message--assistant">
                 <span className="bubble-avatar">
