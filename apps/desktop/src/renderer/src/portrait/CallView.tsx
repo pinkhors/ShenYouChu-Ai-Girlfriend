@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type PointerEvent as ReactPointerEvent
-} from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   ApiError,
   streamTurn,
@@ -13,7 +6,6 @@ import {
   type Conversation
 } from '../api/client'
 import type { AvatarConfig } from '../avatar/avatarConfig'
-import GirlfriendAvatar from '../avatar/GirlfriendAvatar'
 import Icon from '../ui/Icon'
 import {
   audioPlaybackSupported,
@@ -30,10 +22,10 @@ import {
   loadTtsConfig,
   type AsrConfig
 } from '../voice/voiceConfig'
+import AvatarPortrait from './AvatarPortrait'
 import {
   PORTRAIT_SLOTS,
   moodToExpression,
-  resolvePortrait,
   type PortraitExpression,
   type PortraitSet
 } from './expression'
@@ -80,12 +72,12 @@ function cleanVoiceError(error: unknown): string {
 }
 
 /**
- * 通话页：立绘 + 表情差分 + 自动眨眼 + 呼吸感 + 动作。
+ * 通话页：参考豆包的通话布局——柔和渐变、圆形形象、顶部情景/文字入口、
+ * 中间状态与字幕、底部麦克风/摄像头/挂断，表情与动作收进“更多”面板。
  *
  * 语音链路：
- * - 文字输入或按住说话（可选云端 ASR）→ 后端 SSE 回复；
- * - 朗读优先用云端 TTS（返回音频，AnalyserNode 驱动口型），未配置/失败时回退系统语音；
- * - 不接 ASR 时仍可纯文字输入。
+ * - 点麦克风录音（可选云端 ASR）→ 识别文本直接发送；也可以“字”切文字输入；
+ * - 后端 SSE 回复后朗读：云端 TTS 的音频驱动口型，否则系统语音按节奏开合。
  */
 export default function CallView({
   conversation,
@@ -108,11 +100,15 @@ export default function CallView({
   const [line, setLine] = useState('')
   const [reply, setReply] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const [action, setAction] = useState<CallAction | null>(null)
+  const [textMode, setTextMode] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [asrConfig] = useState<AsrConfig>(() => loadAsrConfig())
 
   const abortRef = useRef<AbortController | null>(null)
   const actionTimer = useRef<number | null>(null)
+  const toastTimer = useRef<number | null>(null)
   const speechToken = useRef(0)
   const closedRef = useRef(false)
   const audioRef = useRef<AudioPlaybackHandle | null>(null)
@@ -122,7 +118,6 @@ export default function CallView({
   const asrConfigRef = useRef<AsrConfig | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const lastLevelAt = useRef(0)
-  const holdingMic = useRef(false)
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -187,6 +182,9 @@ export default function CallView({
       if (actionTimer.current !== null) {
         window.clearTimeout(actionTimer.current)
       }
+      if (toastTimer.current !== null) {
+        window.clearTimeout(toastTimer.current)
+      }
     }
   }, [])
 
@@ -217,6 +215,16 @@ export default function CallView({
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [handleClose])
+
+  const showToast = (message: string): void => {
+    setToast(message)
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current)
+    }
+    toastTimer.current = window.setTimeout(() => {
+      setToast(null)
+    }, 2800)
+  }
 
   const playAnswer = async (text: string): Promise<void> => {
     if (closedRef.current) {
@@ -303,10 +311,9 @@ export default function CallView({
     })
   }
 
-  const handleSay = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    const text = line.trim()
-    if (text === '' || thinking || speaking || recording) {
+  const sendText = async (raw: string): Promise<void> => {
+    const text = raw.trim()
+    if (text === '' || thinking || speaking) {
       return
     }
     primeAudio()
@@ -326,14 +333,14 @@ export default function CallView({
         text,
         {
           onStarted: () => {
-            /* 流式开始后界面由 thinking 状态托底 */
+            /* 流式开始后由 thinking 状态托底 */
           },
           onDelta: (delta) => {
             accumulated += delta
             setReply(accumulated)
           },
           onCompleted: () => {
-            /* 流结束后统一朗读，避免边流边读 */
+            /* 流结束后统一朗读 */
           }
         },
         controller.signal
@@ -353,23 +360,29 @@ export default function CallView({
     }
   }
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    void sendText(line)
+  }
+
   const startRecording = async (): Promise<void> => {
     if (recording || transcribing || thinking || speaking) {
       return
     }
     if (!recordingSupported() || window.desktop?.asr === undefined) {
-      setError('当前环境不支持录音，或没有语音识别通道')
+      showToast('当前环境不支持录音')
       return
     }
     const configForRecording = loadAsrConfig()
     if (!isAsrEnabled(configForRecording)) {
-      setError('还没有配置语音识别服务，请先到设置里填写')
+      setTextMode(true)
+      showToast('先在设置里配置语音识别，或直接打字')
       return
     }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (closedRef.current || !holdingMic.current) {
+      if (closedRef.current) {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
@@ -411,7 +424,8 @@ export default function CallView({
     const chunks = chunksRef.current
     chunksRef.current = []
     const recorder = recorderRef.current
-    const mimeType = recorder?.mimeType !== undefined && recorder.mimeType !== '' ? recorder.mimeType : 'audio/webm'
+    const mimeType =
+      recorder?.mimeType !== undefined && recorder.mimeType !== '' ? recorder.mimeType : 'audio/webm'
     recorderRef.current = null
 
     if (chunks.length === 0) {
@@ -438,7 +452,9 @@ export default function CallView({
         mimeType
       })
       setLine(text)
-      inputRef.current?.focus()
+      if (text !== '' && !closedRef.current) {
+        await sendText(text)
+      }
     } catch (transcribeError) {
       setError(cleanVoiceError(transcribeError))
     } finally {
@@ -446,17 +462,21 @@ export default function CallView({
     }
   }
 
-  const handleMicDown = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    event.preventDefault()
-    holdingMic.current = true
-    void startRecording()
-  }
-
-  const handleMicUp = (): void => {
-    holdingMic.current = false
+  const handleMicClick = (): void => {
     if (recording) {
       stopRecording()
+      return
     }
+    if (!recordingSupported() || window.desktop?.asr === undefined) {
+      showToast('当前环境不支持录音')
+      return
+    }
+    if (!isAsrEnabled(asrConfig)) {
+      setTextMode(true)
+      showToast('先在设置里配置语音识别，或直接打字')
+      return
+    }
+    void startRecording()
   }
 
   const triggerAction = (next: CallAction): void => {
@@ -488,143 +508,201 @@ export default function CallView({
       : blinking && !speaking && portraits?.closed !== undefined
         ? 'closed'
         : expression
-  const source = resolvePortrait(portraits, displayExpression)
 
-  const portraitClass = [
-    'call__portrait',
-    action === null ? '' : `call__portrait--${action}`,
-    speaking ? 'call__portrait--speaking' : ''
+  const orbClass = [
+    'call__orb',
+    action === null ? '' : `call__orb--${action}`,
+    speaking ? 'call__orb--speaking' : ''
   ]
     .filter(Boolean)
     .join(' ')
 
-  const canRecord = recordingSupported() && window.desktop?.asr !== undefined && isAsrEnabled(asrConfig)
+  const idleText = reply === '' ? '点击麦克风开始说话' : ''
 
   return (
     <div className="call" role="dialog" aria-modal="true" aria-label="与沈幼楚通话">
-      {source !== null && (
-        <div className="call__bg" style={{ backgroundImage: `url(${source})` }} aria-hidden="true" />
-      )}
-
-      <header className="call__header">
-        <div>
-          <p className="call__eyebrow">语音通话</p>
-          <h2 className="call__name">沈幼楚</h2>
-          <p className="call__timer">通话中 {formatDuration(seconds)}</p>
-        </div>
-        <button className="call__close" type="button" aria-label="关闭通话" onClick={handleClose}>
-          <Icon name="close" size={20} />
+      <header className="call__top">
+        <button
+          className="call__round"
+          type="button"
+          aria-label="表情与动作"
+          aria-expanded={sheetOpen}
+          onClick={() => setSheetOpen((previous) => !previous)}
+        >
+          •••
+        </button>
+        <span className="call__pill">
+          语音通话 · {formatDuration(seconds)}
+        </span>
+        <button
+          className={textMode ? 'call__round call__round--active' : 'call__round'}
+          type="button"
+          aria-pressed={textMode}
+          onClick={() => setTextMode((previous) => !previous)}
+        >
+          字
         </button>
       </header>
 
-      <div className="call__stage">
-        <div className={portraitClass}>
-          {source !== null ? (
-            <img src={source} alt="沈幼楚" draggable={false} />
-          ) : (
-            <GirlfriendAvatar config={config} />
+      <div className="call__warning" role="note">
+        <span className="call__warning-dot" aria-hidden="true">
+          !
+        </span>
+        <span>AI 生成内容，不要用于医疗、法律、金融等可能影响健康或安全的决策。</span>
+      </div>
+
+      <main className="call__center">
+        <div className={orbClass}>
+          <AvatarPortrait
+            config={config}
+            portraits={portraits}
+            expression={displayExpression}
+            variant="avatar"
+          />
+        </div>
+
+        <div className="call__status" aria-live="polite">
+          {(thinking || recording || transcribing) && (
+            <span className="call__dots" aria-hidden="true">
+              <span className="call__dot" />
+              <span className="call__dot" />
+              <span className="call__dot" />
+            </span>
+          )}
+          <p className="call__status-text">
+            {thinking
+              ? '她正在想…'
+              : recording
+                ? '正在听… 点击麦克风发送'
+                : transcribing
+                  ? '正在识别…'
+                  : speaking
+                    ? '她在说话…'
+                    : idleText}
+          </p>
+          {reply !== '' && !thinking && !recording && (
+            <p className="call__reply" title={reply}>
+              {reply}
+            </p>
+          )}
+          {speaking && (
+            <button className="call__stop" type="button" onClick={handleStopPlayback}>
+              停止朗读
+            </button>
+          )}
+          {reply === '' && !thinking && !recording && !speaking && (
+            <p className="call__mood">{moodLine(characterState)}</p>
           )}
         </div>
-        <p className="call__line">
-          {thinking
-            ? '她正在想…'
-            : transcribing
-              ? '正在识别…'
-              : recording
-                ? '我在听…'
-                : reply !== ''
-                  ? reply
-                  : moodLine(characterState)}
-        </p>
-      </div>
+      </main>
+
+      {sheetOpen && (
+        <section className="call__sheet" aria-label="表情与动作">
+          <div className="call__sheet-label">表情</div>
+          <div className="call__sheet-row">
+            {PORTRAIT_SLOTS.filter((slot) => slot.id !== 'closed' && slot.id !== 'talking').map((slot) => {
+              const available = portraits?.[slot.id] !== undefined
+              return (
+                <button
+                  key={slot.id}
+                  className={expression === slot.id ? 'call__chip call__chip--active' : 'call__chip'}
+                  type="button"
+                  disabled={!available}
+                  onClick={() => setExpression(slot.id)}
+                >
+                  {slot.label}
+                </button>
+              )
+            })}
+            {speaking && (
+              <button className="call__chip" type="button" onClick={handleStopPlayback}>
+                停止朗读
+              </button>
+            )}
+          </div>
+          <div className="call__sheet-label">动作</div>
+          <div className="call__sheet-row">
+            <button className="call__chip" type="button" onClick={() => triggerAction('nod')}>
+              点头
+            </button>
+            <button className="call__chip" type="button" onClick={() => triggerAction('tilt')}>
+              歪头
+            </button>
+            <button className="call__chip" type="button" onClick={() => triggerAction('lean')}>
+              凑近
+            </button>
+          </div>
+        </section>
+      )}
+
+      {textMode && (
+        <form className="call__text" onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            className="call__text-input"
+            type="text"
+            placeholder="打字对她说…"
+            maxLength={500}
+            value={line}
+            disabled={thinking || speaking || recording}
+            onChange={(event) => setLine(event.target.value)}
+          />
+          <button
+            className="call__text-send"
+            type="submit"
+            disabled={thinking || speaking || recording || transcribing || line.trim() === ''}
+          >
+            发送
+          </button>
+        </form>
+      )}
 
       {error !== null && <p className="call__error">{error}</p>}
+      {toast !== null && <p className="call__toast">{toast}</p>}
 
-      <form className="call__say" onSubmit={(event) => void handleSay(event)}>
-        {canRecord && (
-          <button
-            className={recording ? 'call__mic call__mic--recording' : 'call__mic'}
-            type="button"
-            title={recording ? '松开结束' : '按住说话'}
-            aria-label={recording ? '松开结束录音' : '按住说话'}
-            disabled={thinking || speaking || transcribing}
-            onPointerDown={handleMicDown}
-            onPointerUp={handleMicUp}
-            onPointerLeave={handleMicUp}
-            onPointerCancel={handleMicUp}
-          >
-            <Icon name={recording ? 'stop' : 'mic'} size={18} />
-          </button>
-        )}
-        <input
-          ref={inputRef}
-          className="call__say-input"
-          type="text"
-          placeholder="对她说点什么…（回车发送，她会朗读回复）"
-          maxLength={500}
-          value={line}
-          disabled={thinking || speaking || recording}
-          onChange={(event) => setLine(event.target.value)}
-        />
+      <footer className="call__dock">
         <button
-          className="call__say-submit"
-          type="submit"
-          disabled={thinking || speaking || recording || transcribing || line.trim() === ''}
-        >
-          {thinking ? '思考中…' : transcribing ? '识别中…' : '说'}
-        </button>
-      </form>
-
-      <div className="call__tray">
-        <div className="call__expressions" role="group" aria-label="切换表情">
-          {PORTRAIT_SLOTS.filter((slot) => slot.id !== 'closed' && slot.id !== 'talking').map((slot) => {
-            const available = portraits?.[slot.id] !== undefined
-            return (
-              <button
-                key={slot.id}
-                className={expression === slot.id ? 'call__chip call__chip--active' : 'call__chip'}
-                type="button"
-                disabled={!available}
-                onClick={() => setExpression(slot.id)}
-              >
-                {slot.label}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="call__actions" role="group" aria-label="动作">
-          <button className="call__chip" type="button" onClick={() => triggerAction('nod')}>
-            点头
-          </button>
-          <button className="call__chip" type="button" onClick={() => triggerAction('tilt')}>
-            歪头
-          </button>
-          <button className="call__chip" type="button" onClick={() => triggerAction('lean')}>
-            凑近
-          </button>
-        </div>
-      </div>
-
-      <footer className="call__controls">
-        <button
-          className="call__control"
+          className={
+            recording
+              ? 'call__dock-btn call__dock-btn--mic call__dock-btn--recording'
+              : 'call__dock-btn call__dock-btn--mic'
+          }
           type="button"
-          disabled={!speaking}
-          onClick={handleStopPlayback}
+          aria-label={recording ? '发送语音' : '开始语音输入'}
+          disabled={!recording && (thinking || speaking || transcribing)}
+          onClick={handleMicClick}
         >
-          <Icon name="stop" size={20} />
-          <span>停止朗读</span>
+          <Icon name={recording ? 'stop' : 'mic'} size={26} />
         </button>
-        <button className="call__control call__control--hangup" type="button" onClick={handleClose}>
-          <Icon name="phone" size={20} />
-          <span>挂断</span>
+        <button
+          className="call__dock-btn call__dock-btn--off"
+          type="button"
+          disabled
+          title="摄像头通话还没接入"
+          aria-label="摄像头通话还没接入"
+        >
+          <Icon name="camera" size={22} />
+        </button>
+        <button
+          className="call__dock-btn call__dock-btn--off"
+          type="button"
+          disabled
+          title="视频通话还没接入"
+          aria-label="视频通话还没接入"
+        >
+          <Icon name="video" size={22} />
+        </button>
+        <button
+          className="call__dock-btn call__dock-btn--end"
+          type="button"
+          aria-label="挂断"
+          onClick={handleClose}
+        >
+          <Icon name="phone" size={24} />
         </button>
       </footer>
 
-      <p className="call__hint">
-        文字输入或按住麦克风说话（需在设置里配置 ASR）；回复用系统/云端语音朗读，云端音频会驱动口型。
-      </p>
+      <p className="call__disclaimer">内容由 AI 生成</p>
     </div>
   )
 }

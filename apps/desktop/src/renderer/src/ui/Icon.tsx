@@ -24,6 +24,7 @@ export type IconName =
   | 'refresh'
   | 'phone'
   | 'video'
+  | 'camera'
 
 const PATHS: Record<IconName, ReactNode> = {
   chat: (
@@ -95,6 +96,13 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <rect x="3.5" y="6" width="12" height="12" rx="2.5" />
       <path d="M15.5 10.5l5-3v9l-5-3z" strokeLinejoin="round" />
+    </>
+  ),
+  camera: (
+    <>
+      <rect x="3.5" y="6.5" width="12.5" height="11" rx="2.5" />
+      <circle cx="9.8" cy="12" r="3" />
+      <path d="M16 10.5l4.5-2.5v8L16 13.5z" strokeLinejoin="round" />
     </>
   )
 }

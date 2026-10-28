@@ -622,3 +622,14 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 54 passed / 0 failed。
 未验证：真实 TTS/ASR 供应商、麦克风与 Electron 窗口；音素级 viseme 仍未接。
+
+## Round 31：通话页改为豆包式布局（2026-10-28）
+
+- 参考用户提供的豆包通话截图重做通话页：浅色渐变背景、圆形形象（带光晕与呼吸）、顶部「••• / 语音通话·计时 / 字」、AI 提示条、中间状态点与字幕、底部麦克风/摄像头/挂断、页脚「内容由 AI 生成」；
+- 表情与动作收进「•••」面板，默认界面更干净；
+- 「字」切换文字输入；麦克风改为点击录音、再点发送；ASR 识别后自动发送；
+- 摄像头/视频按钮保留为置灰占位（未接入）；
+- 保留云端 TTS 的 analyser 口型、系统语音回退、自动眨眼与动作动画。
+
+验证：`tsc --noEmit` exit 0；`npm test` 54 passed / 0 failed。
+未验证：实际窗口视觉（沙箱不能起 Electron）。
