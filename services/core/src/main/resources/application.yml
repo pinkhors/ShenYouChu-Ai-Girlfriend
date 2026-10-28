@@ -61,6 +61,10 @@ shenyouchu:
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
     max-tokens: ${LLM_MAX_TOKENS:256}
     temperature: ${LLM_TEMPERATURE:0.8}
+  voice:
+    # false 时使用占位 ASR/TTS（音频按 UTF-8 文本解码、TTS 返回 none），保证离线可演示；
+    # 接入 FunASR / CosyVoice 后置为 true 并替换同一接口的实现。
+    enabled: ${VOICE_ENABLED:false}
   cors:
     # 桌面端本地开发地址；生产环境改为实际域名
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

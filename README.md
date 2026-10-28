@@ -32,6 +32,12 @@ GET  /auth/me         当前用户
 GET  /characters      内置角色（沈幼楚）
 GET/POST /conversations           会话列表/创建
 GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
+POST /conversations/{id}/turns         文本轮次（人设回复 + 记忆 + 活动事件）
+POST /conversations/{id}/turns/stream  SSE 流式轮次（turn.started / assistant.text.delta / turn.completed）
+GET  /conversations/{id}/messages      会话消息
+POST /conversations/{id}/voice-turns   语音轮次（M2 骨架：ASR → 轮次 → TTS）
+GET/DELETE /memories                   记忆列表 / 删除
+GET  /activity-events                  活动记录（可按类型筛选）
 ```
 
 ## 文档

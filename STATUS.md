@@ -174,3 +174,19 @@ mvn -B spring-boot:run -pl services/core
 - 验证：`node_modules/.bin/tsc --noEmit` **exit 0**。
 
 下一轮：M1 收尾（README/STATUS 对齐、验收脚本实跑指引），随后进入 M2 语音对话（ASR/TTS 适配器与可取消轮次）。
+
+## Round 7 进展（2026-10-28）
+
+已实现并验证：
+
+- M2 语音 seam：`AsrAdapter` / `TtsAdapter` 接口 + `StubAsrAdapter` / `StubTtsAdapter` 占位实现（音频按 UTF-8 文本解码便于离线验证，TTS 返回 none 格式）；
+- 语音轮次接口：`POST /api/v1/conversations/{id}/voice-turns`，链路为音频 → ASR → 文本轮次（复用记忆与活动事件）→ TTS，非法 Base64 与空识别结果返回 400；
+- 配置：`shenyouchu.voice.enabled`（默认 false 用占位实现）；
+- README 接口清单补齐轮次、SSE、消息、记忆、活动、语音接口；
+- 验证：`mvn -DskipTests package` 成功；`StubVoiceAdaptersTest` 等 5 个纯逻辑测试类全部通过。
+
+下一轮：
+
+1. 桌面端加语音输入入口（录音按钮 + 状态，M2 先用 text base64 占位链路验证）；
+2. 语音轮次验收脚本与 README 步骤；
+3. 继续 M2：真实 ASR/TTS 接入（FunASR/CosyVoice）与可取消轮次。
