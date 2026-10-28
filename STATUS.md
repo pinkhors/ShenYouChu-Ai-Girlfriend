@@ -713,3 +713,12 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 58 passed；`npm run build` 仍被沙箱 esbuild `spawn EPERM` 阻止，需本机重启 dev 让 preload 重新构建。
 本轮无 SQL 变更。
+
+## Round 39：修复 Electron 无窗口（ELECTRON_RUN_AS_NODE）（2026-10-28）
+
+- 确认 Electron 二进制存在（33.4.11，188MB），不是环境缺失；
+- 当前环境存在 `ELECTRON_RUN_AS_NODE=1`，会让 Electron 以 Node 模式运行，`electron-vite dev` 停在 `start electron app...` 且无窗口；
+- `npm run dev` 改为 `node scripts/dev.mjs dev`：启动前删除该环境变量，并透传 electron-vite 参数/信号；
+- README 增加对应故障排查行。
+
+验证：`node --check scripts/dev.mjs`、`tsc --noEmit` 通过；未实际启动窗口（沙箱无法 GUI）。无 SQL 变更。
