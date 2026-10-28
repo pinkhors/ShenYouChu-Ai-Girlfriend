@@ -102,16 +102,16 @@ apps/desktop/
 - **预加载用 CJS**：`package.json` 为 `"type": "module"`，而 Electron 在 `sandbox: true` 下不支持 ESM 预加载脚本，因此 `electron.vite.config.ts` 显式把 preload 构建为 `out/preload/index.cjs`（主进程按该文件名加载）。
 - **主进程路径用 `app.getAppPath()`**：主进程产物是 ESM，没有 `__dirname`，所以 preload 与生产 `index.html` 都基于 `app.getAppPath()` 解析。
 - **凭证存储**：M0 用 `localStorage`（可刷新恢复、零 IPC），后续改为主进程 `safeStorage`；`tokenStore` 的 get/set/clear 签名保持不变即可平滑迁移。
-- **接口对齐现有后端**：按 `services/core` 的实际实现对接（`/api/v1` 前缀；会话列表返回裸数组而非契约文档 3.2 描述的 cursor 分页；错误体为 `{ code, message, requestId }`）。
+- **接口对齐现有后端**：按 `services/core` 的实际实现对接（`/api/v1` 前缀；消息列表已按 cursor 分页，会话列表当前仍返回数组；错误体为 `{ code, message, requestId }`）。
 - **不设置 renderer `base`**：electron-vite 在生产构建时会自动把渲染进程 `base` 置为 `'./'`，使 `file://` 下的资源相对路径可用；显式覆盖反而会触发告警。
 - **不引入** UI 库、状态库、路由库；不使用 `any`，不安全处用 `unknown` 收窄；所有事件处理器显式标注类型。
 
 ## 遗留项
 
-- TODO(M1 语音)、TODO(M2 视觉)、TODO(M3 Live2D)：仅注释占位，未实现；
+- TODO(M2 视觉)、TODO(M3 Live2D)：仅注释占位，未实现；语音为 M2 占位链路（文本 Base64 → ASR → 轮次 → TTS），真实模型接入见 docs/05；
 - TODO(M3 安全存储)：`tokenStore` 迁移到 `safeStorage` + 受限 IPC；
 - 生产构建后按需补严格 CSP（`index.html` 现无 CSP meta，因为开发期 React Refresh 需要内联脚本）；
-- 契约文档 3.2 的 cursor 分页与后端现有裸数组实现不一致，需后端或文档择一收敛。
+- 会话列表接口目前返回数组、契约文档 3.2 写的是 cursor 分页（消息列表已按 cursor 分页实现），需后端或文档择一收敛；
 
 ## 本机联调步骤与故障排查
 

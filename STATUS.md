@@ -492,3 +492,17 @@ node --test           18 passed / 0 failed
 ```
 
 下一轮：Milvus 向量清理端口（P2）或最终收尾核对（README/验收清单/待确认项汇总）。
+
+## Round 25 进展（2026-10-28）
+
+已实现并验证：
+
+- CI 增加桌面端 job：Node 20 + `npm ci --ignore-scripts` → `npm run typecheck` → `npm test`
+  （前端测试不需要 Electron 二进制，CI 可稳定运行；Java job 仍跑 `mvn verify`，全部 Java 测试含 Mockito）；
+- 一致性核对与修正：`apps/desktop/README.md` 更新为“消息已 cursor 分页、会话列表仍为数组”，
+  遗留项同步（语音为 M2 占位链路，真实模型见 docs/05）；
+- STATUS 历史待确认项说明：会话列表分页仍未收敛（消息分页已完成），保留为待确认项。
+
+验证：`tsc --noEmit` exit 0；`npm test` 18 passed / 0 failed；`mvn package` 此前 BUILD SUCCESS。
+
+下一轮：最后核对 README/验收清单与待确认项，准备里程碑收尾总结。
