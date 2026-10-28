@@ -1490,6 +1490,12 @@ select {
   font-size: 12px;
 }
 
+.look__source {
+  margin: 6px 0 0;
+  color: var(--green);
+  font-size: 12px;
+}
+
 .look__body {
   flex: 1;
   min-height: 0;
@@ -1995,6 +2001,23 @@ select {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.call__orb-loading {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(from 200deg, #f3d7ea, #dce6ff, #e9dcff, #f7dbe8);
+  animation: orb-loading 1.8s ease-in-out infinite;
+}
+
+@keyframes orb-loading {
+  50% {
+    opacity: 0.55;
+    transform: scale(0.98);
+  }
 }
 
 .call__orb--speaking {

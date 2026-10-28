@@ -633,3 +633,16 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 54 passed / 0 failed。
 未验证：实际窗口视觉（沙箱不能起 Electron）。
+
+## Round 32：通话形象来源、加载与回退（2026-10-28）
+
+- 新增 `portrait/avatarSource.ts`：明确 `loading → 用户立绘 → 矢量` 的优先级；
+- App 增加 `portraitsLoading`：登录/切换账号时先清空上一位用户的立绘，再异步加载；通话在加载期显示渐变占位，避免先闪默认形象；
+- `AvatarPortrait` 增加 `onError` 回退：单张立绘损坏 / 解码失败时回退矢量，不白屏；
+- 形象页显示「通话将使用：已导入立绘（N 张）/ 默认矢量形象」，便于验收；
+- 通话圆形形象加 `data-avatar-source` 便于检查；
+- README 补充触发条件、优先级、隔离失败与完成判定清单；
+- 测试新增 4 个形象来源用例（共 58 个）。
+
+验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
+未验证：实际窗口视觉；损坏图片回退为手动验收项。

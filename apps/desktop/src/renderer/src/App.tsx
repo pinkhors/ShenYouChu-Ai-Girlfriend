@@ -123,6 +123,7 @@ export default function App() {
   const [characterState, setCharacterState] = useState<CharacterState | null>(null)
   const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR)
   const [portraits, setPortraits] = useState<PortraitSet | null>(null)
+  const [portraitsLoading, setPortraitsLoading] = useState(false)
   const [callOpen, setCallOpen] = useState(false)
   const [chatVersion, setChatVersion] = useState(0)
   const [accountError, setAccountError] = useState<string | null>(null)
@@ -180,17 +181,26 @@ export default function App() {
   useEffect(() => {
     if (user === null) {
       setPortraits(null)
+      setPortraitsLoading(false)
       return
     }
     let cancelled = false
+    /* 切换用户时先清掉上一位的立绘，加载完成前由调用方显示加载态 */
+    setPortraits(null)
+    setPortraitsLoading(true)
     void loadPortraits(user.id)
       .then((loaded) => {
         if (!cancelled) {
           setPortraits(loaded)
+          setPortraitsLoading(false)
         }
       })
       .catch(() => {
         /* 读取失败按没有立绘处理，界面回退矢量形象 */
+        if (!cancelled) {
+          setPortraits(null)
+          setPortraitsLoading(false)
+        }
       })
     return () => {
       cancelled = true
@@ -698,6 +708,7 @@ export default function App() {
             config={avatar}
             onSave={handleSaveAvatar}
             portraits={portraits}
+            portraitsLoading={portraitsLoading}
             onImportPortrait={handleImportPortrait}
             onRemovePortrait={handleRemovePortrait}
             onClearPortraits={handleClearPortraits}
@@ -727,6 +738,7 @@ export default function App() {
         <CallView
           conversation={activeConversation}
           portraits={portraits}
+          portraitsLoading={portraitsLoading}
           config={avatar}
           characterState={characterState}
           onClose={() => {

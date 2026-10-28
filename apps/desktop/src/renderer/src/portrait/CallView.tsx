@@ -23,6 +23,7 @@ import {
   type AsrConfig
 } from '../voice/voiceConfig'
 import AvatarPortrait from './AvatarPortrait'
+import { resolveAvatarSource } from './avatarSource'
 import {
   PORTRAIT_SLOTS,
   moodToExpression,
@@ -33,6 +34,7 @@ import {
 interface CallViewProps {
   readonly conversation: Conversation
   readonly portraits: PortraitSet | null
+  readonly portraitsLoading: boolean
   readonly config: AvatarConfig
   readonly characterState: CharacterState | null
   readonly onClose: () => void
@@ -82,6 +84,7 @@ function cleanVoiceError(error: unknown): string {
 export default function CallView({
   conversation,
   portraits,
+  portraitsLoading,
   config,
   characterState,
   onClose
@@ -509,6 +512,8 @@ export default function CallView({
         ? 'closed'
         : expression
 
+  const avatarSource = resolveAvatarSource(portraits, portraitsLoading)
+
   const orbClass = [
     'call__orb',
     action === null ? '' : `call__orb--${action}`,
@@ -552,17 +557,21 @@ export default function CallView({
       </div>
 
       <main className="call__center">
-        <div className={orbClass}>
-          <AvatarPortrait
-            config={config}
-            portraits={portraits}
-            expression={displayExpression}
-            variant="avatar"
-          />
+        <div className={orbClass} data-avatar-source={avatarSource}>
+          {avatarSource === 'loading' ? (
+            <div className="call__orb-loading" role="status" aria-label="正在加载她的形象" />
+          ) : (
+            <AvatarPortrait
+              config={config}
+              portraits={portraits}
+              expression={displayExpression}
+              variant="avatar"
+            />
+          )}
         </div>
 
         <div className="call__status" aria-live="polite">
-          {(thinking || recording || transcribing) && (
+          {(portraitsLoading || thinking || recording || transcribing) && (
             <span className="call__dots" aria-hidden="true">
               <span className="call__dot" />
               <span className="call__dot" />
@@ -570,15 +579,17 @@ export default function CallView({
             </span>
           )}
           <p className="call__status-text">
-            {thinking
-              ? '她正在想…'
-              : recording
-                ? '正在听… 点击麦克风发送'
-                : transcribing
-                  ? '正在识别…'
-                  : speaking
-                    ? '她在说话…'
-                    : idleText}
+            {portraitsLoading
+              ? '正在加载她的形象…'
+              : thinking
+                ? '她正在想…'
+                : recording
+                  ? '正在听… 点击麦克风发送'
+                  : transcribing
+                    ? '正在识别…'
+                    : speaking
+                      ? '她在说话…'
+                      : idleText}
           </p>
           {reply !== '' && !thinking && !recording && (
             <p className="call__reply" title={reply}>
