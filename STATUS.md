@@ -367,3 +367,22 @@ DEMO VERIFICATION PASSED: all 4 steps
 测试：7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS。
 
 下一轮：README 里程碑收尾；可选的对象存储/Milvus 清理端口实现。
+
+## Round 17 进展（2026-10-28）
+
+修复与收尾：
+
+- **编码事故修复**：此前用 PowerShell `Get-Content`（按 ANSI 读取 UTF-8 文件）再 `Set-Content`
+  重写了 5 个 Markdown，导致中文乱码。已从各自最后一个正常版本恢复，再用文件工具（UTF-8 安全）
+  重新应用后续改动：
+  - `README.md`（当前状态、端口 48080、取消/账号删除/关系状态接口、ADR-0005、验收清单链接）
+  - `docs/04-acceptance-checklist.md`（版本 v0.2，状态与证据更新）
+  - `docs/README.md`（验收清单索引）
+  - `scripts/README.md`（verify-account-deletion、demo 登记与用法）
+  - `docs/contracts/data-and-interface-contracts.md`（取消接口、`relationship.updated`、
+    `/character-state`、`/account/deletion`）
+- 全仓库 `*.md` 已无乱码残留（grep 校验通过）；
+- 规则固化：`AGENTS.md` 与 `docs/03-development-standards.md` 均要求 Markdown 使用 UTF-8，
+  并禁止用 PowerShell 默认编码整篇重写文档。
+
+下一轮：M2 真实模型接入手册（FunASR/CosyVoice 包装服务协议 + 延迟测量步骤）。
