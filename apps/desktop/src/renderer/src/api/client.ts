@@ -370,3 +370,30 @@ export function listActivityEvents(type?: string, limit = 50): Promise<ActivityE
   query.set('limit', String(limit))
   return request<ActivityEventView[]>(`/activity-events?${query.toString()}`)
 }
+
+export interface VoiceTurnResponse {
+  readonly turnId: string
+  readonly recognizedText: string
+  readonly confidence: number
+  readonly assistantMessage: Message
+  readonly ttsAudioBase64: string
+  readonly ttsFormat: string
+}
+
+/** UTF-8 文本转 Base64；M2 占位语音链路用它替代真实音频字节。 */
+export function textToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary)
+}
+
+/** 语音轮次：M2 占位实现接受 text/plain 的 Base64 音频；接入真实模型后协议不变。 */
+export function voiceTurn(conversationId: string, audioBase64: string, contentType = 'text/plain'): Promise<VoiceTurnResponse> {
+  return request<VoiceTurnResponse>(`/conversations/${encodeURIComponent(conversationId)}/voice-turns`, {
+    method: 'POST',
+    body: { audioBase64, contentType }
+  })
+}

@@ -190,3 +190,15 @@ mvn -B spring-boot:run -pl services/core
 1. 桌面端加语音输入入口（录音按钮 + 状态，M2 先用 text base64 占位链路验证）；
 2. 语音轮次验收脚本与 README 步骤；
 3. 继续 M2：真实 ASR/TTS 接入（FunASR/CosyVoice）与可取消轮次。
+
+## Round 8 进展（2026-10-28）
+
+已实现并验证：
+
+- 前端语音入口：`client.voiceTurn`、`textToBase64`，会话详情新增「语音（占位）」按钮，展示识别文本、置信度与 TTS 格式说明；
+- 验收脚本：新增 [scripts/verify-m2.ps1](scripts/verify-m2.ps1)，覆盖语音占位链路、非法 Base64 400、消息/记忆落库、越权 404、匿名 401；
+- 验证：前端 `tsc --noEmit` exit 0；`verify-m2.ps1` PowerShell 解析通过。
+
+说明：占位链路用 UTF-8 文本 Base64 代替真实音频，仅用于在无麦克风/无模型环境下验证协议与归属校验；真实 ASR/TTS 接入后同一接口不变。
+
+下一轮：真实 ASR/TTS 适配器（FunASR/CosyVoice）与可取消轮次；桌面端录音授权与状态机骨架。

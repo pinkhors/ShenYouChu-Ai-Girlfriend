@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { ApiError, listMessages, streamTurn, type Conversation, type Message } from './api/client'
+import { ApiError, listMessages, streamTurn, textToBase64, voiceTurn, type Conversation, type Message } from './api/client'
 
 interface ConversationPanelProps {
   readonly conversation: Conversation
@@ -27,6 +27,7 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(async () => {
@@ -89,6 +90,29 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
     }
   }
 
+  const handleVoicePlaceholder = async () => {
+    const text = draft.trim()
+    if (text === '' || isSending) {
+      return
+    }
+    setDraft('')
+    setError(null)
+    setVoiceNotice(null)
+    setIsSending(true)
+    try {
+      const result = await voiceTurn(conversation.id, textToBase64(text))
+      setVoiceNotice(
+        `识别为「${result.recognizedText}」（置信度 ${result.confidence}）。` +
+          (result.ttsFormat === 'none' ? '当前为占位语音，未合成音频。' : `语音格式：${result.ttsFormat}`)
+      )
+      await load()
+    } catch (voiceError) {
+      setError(toMessage(voiceError))
+    } finally {
+      setIsSending(false)
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -132,6 +156,8 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
             </ul>
           )}
 
+          {voiceNotice !== null && <p className="muted">{voiceNotice}</p>}
+
           <form className="composer" onSubmit={(event) => void handleSubmit(event)}>
             <input
               className="field__input"
@@ -144,6 +170,14 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
             />
             <button className="button button--primary" type="submit" disabled={isSending || draft.trim() === ''}>
               {isSending ? '她正在回应…' : '发送'}
+            </button>
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={isSending || draft.trim() === ''}
+              onClick={() => void handleVoicePlaceholder()}
+            >
+              语音（占位）
             </button>
           </form>
         </section>

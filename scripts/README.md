@@ -8,6 +8,7 @@
 | `pull-images.sh` | 同上，Git Bash / WSL 版本 | Docker Desktop |
 | `verify-m0.ps1` | 后端 M0 端到端验收：健康检查、注册、会话越权 404、重复注册 409、匿名 401 | 后端运行在 `http://127.0.0.1:48080` |
 | `verify-m1.ps1` | 后端 M1 验收：轮次、消息、记忆、活动事件、越权、SSE 流式 | 同上 |
+| `verify-m2.ps1` | 后端 M2 验收：语音占位链路（ASR→轮次→TTS）、非法 Base64、越权 | 同上 |
 
 ## 使用
 
