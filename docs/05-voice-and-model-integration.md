@@ -139,9 +139,11 @@ PRD 的主体验指标是：**用户说完一句话 → 客户端实际听到第
 
 账号删除流程（`AccountDeletionService`）已内置清理端口 `AccountPurgePort`：
 
-- ✅ Redis：`RedisAccountPurgePort`（`REDIS_ENABLED=true` 时生效）；
-- 🚧 Milvus 向量：待实现，接入后新增一个 `AccountPurgePort` Bean 即可；
-- 🚧 对象存储录像：待实现，按 `users/{userId}/` 前缀清理。
+- ✅ Redis：`RedisAccountPurgePort`（`REDIS_ENABLED=true` 时生效），按 `sess/turn/rate/media:{userId}:*` 删除；
+- ✅ 对象存储：`S3AccountPurgePort`（`STORAGE_ENABLED=true` 时生效），按 `users/{userId}/` 前缀删除；
+  使用 MinIO 客户端，已通过本地 MinIO 集成测试（`S3AccountPurgePortTest`，MinIO 不可用时自动跳过）；
+  阿里云 OSS 的 S3 兼容存在限制，生产接入前需核验，必要时增加 OSS 官方 SDK 适配器；
+- 🚧 Milvus 向量：待实现，接入后新增一个 `AccountPurgePort` Bean 即可（当前由 `NoOpAccountPurgePort` 占位并记录日志）。
 
 ## 六、故障排查
 

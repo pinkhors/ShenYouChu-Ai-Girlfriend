@@ -81,6 +81,13 @@ shenyouchu:
   redis:
     # true 时账号删除会清理 Redis 中的会话/临时键（键约定见契约 7.1）。
     enabled: ${REDIS_ENABLED:false}
+  storage:
+    # true 时账号删除会按 users/{userId}/ 前缀清理 S3 兼容对象存储（本地 MinIO）。
+    enabled: ${STORAGE_ENABLED:false}
+    endpoint: ${STORAGE_ENDPOINT:http://127.0.0.1:49000}
+    access-key: ${STORAGE_ACCESS_KEY:sycminio}
+    secret-key: ${STORAGE_SECRET_KEY:syc_dev_minio}
+    bucket: ${STORAGE_BUCKET:shenyouchu}
   cors:
     # 桌面端本地开发地址；生产环境改为实际域名
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

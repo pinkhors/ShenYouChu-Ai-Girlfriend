@@ -28,6 +28,8 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const activeTurnIdRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -36,6 +38,7 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
     try {
       const page = await listMessages(conversation.id)
       setMessages(page.items)
+      setNextCursor(page.nextCursor)
       setError(null)
     } catch (loadError) {
       setError(toMessage(loadError))
@@ -43,6 +46,26 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
       setIsLoading(false)
     }
   }, [conversation.id])
+
+  /** 加载更早/后续分页；去重后追加，避免与首屏重复。 */
+  const handleLoadMore = async (): Promise<void> => {
+    if (nextCursor === null || isLoadingMore) {
+      return
+    }
+    setIsLoadingMore(true)
+    try {
+      const page = await listMessages(conversation.id, 20, nextCursor)
+      setMessages((previous) => {
+        const seen = new Set(previous.map((item) => item.id))
+        return [...previous, ...page.items.filter((item) => !seen.has(item.id))]
+      })
+      setNextCursor(page.nextCursor)
+    } catch (loadError) {
+      setError(toMessage(loadError))
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
 
   useEffect(() => {
     void load()
@@ -172,6 +195,17 @@ export default function ConversationPanel({ conversation, onBack }: Conversation
                 </li>
               )}
             </ul>
+          )}
+
+          {nextCursor !== null && (
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={isLoadingMore}
+              onClick={() => void handleLoadMore()}
+            >
+              {isLoadingMore ? '加载中…' : '加载更多消息'}
+            </button>
           )}
 
           {voiceNotice !== null && <p className="muted">{voiceNotice}</p>}

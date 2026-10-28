@@ -15,6 +15,6 @@ public class NoOpAccountPurgePort implements AccountPurgePort {
 
     @Override
     public void purge(Long userId) {
-        log.info("Account purge hook invoked for userId={} (Redis/Milvus/object storage not wired yet)", userId);
+        log.info("Account purge hook invoked for userId={} (Milvus/vector purge not wired yet)", userId);
     }
 }

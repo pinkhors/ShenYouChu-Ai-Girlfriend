@@ -435,3 +435,20 @@ DEMO VERIFICATION PASSED: all 4 steps
 测试：7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS；桌面端 `tsc --noEmit` exit 0。
 
 下一轮：可选实现对象存储清理端口（S3 前缀删除），或补 README 的 M1 完整接口说明。
+
+## Round 21 进展（2026-10-28）
+
+已实现并验证：
+
+- 对象存储清理端口：`S3AccountPurgePort`（`STORAGE_ENABLED=true`），按 `users/{userId}/` 前缀删除，
+  使用 MinIO 客户端；`STORAGE_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET` 配置化；
+- 集成测试 `S3AccountPurgePortTest`：在本地 MinIO 上真实执行（非跳过），
+  验证只删除目标用户前缀、邻居用户对象保留；MinIO 不可用时自动跳过；
+- 桌面端消息分页 UI：会话详情新增「加载更多消息」，按 nextCursor 翻页并去重追加；
+- 账号删除真实运行时日志确认三个端口依次执行：
+  `NoOpAccountPurgePort`（Milvus 待接入）→ `RedisAccountPurgePort` → `S3AccountPurgePort`。
+
+真实验收：`scripts/demo.ps1` 四步全部通过（含分页、幂等、SSE、取消、关系状态、级联删除）；
+8 个测试类通过（含 S3 集成测试）；`mvn package` BUILD SUCCESS；桌面端 `tsc --noEmit` exit 0。
+
+下一轮：Milvus 向量清理端口（P2 依赖 Milvus 接入后）；或 README/验收清单最终收尾。
