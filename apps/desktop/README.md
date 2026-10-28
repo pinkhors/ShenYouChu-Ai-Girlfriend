@@ -11,7 +11,7 @@ Electron + React + TypeScript 桌面骨架。当前为 **M0：登录 + 会话增
 curl http://127.0.0.1:48080/api/v1/auth/me   # 返回 401 即表示服务已在运行
 ```
 
-Node.js 20+ 与 npm。前端依赖只安装在 `apps/desktop/node_modules`，与后端 `services/core` 完全独立。
+Node.js 20+ 与 npm。前端依赖只安装在 `apps/desktop/node_modules`，与后端 `services/core` 完全独立；**依赖、锁文件与包管理器缓存只允许在 `apps/desktop` 内创建，不要在仓库根生成 `package.json`、`node_modules`、pnpm/npm 缓存或锁文件**。
 
 ## 安装与运行
 
