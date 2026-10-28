@@ -18,14 +18,28 @@
 
 支持的接口是 OpenAI 兼容的 `POST {base-url}/chat/completions`。
 
+> **配置位置**：用 `mvn spring-boot:run` 或 IDEA 启动 core 时，不要在根目录 `.env` 里填这些值——`.env` 只被 `docker compose` 读取，Spring Boot 不会自动加载。请设置到 **启动 core 的进程环境变量**（见下面命令 / IDEA Run Configuration）。
+
+DeepSeek 示例（推荐，便宜且中文稳定）：
+
+```cmd
+set LLM_ENABLED=true
+set LLM_BASE_URL=https://api.deepseek.com/v1
+set LLM_API_KEY=sk-xxx
+set LLM_MODEL=deepseek-chat
+set LLM_MAX_TOKENS=512
+set LLM_TIMEOUT_SECONDS=60
+mvn -B spring-boot:run -pl services/core
+```
+
+DashScope 示例：
+
 ```cmd
 set LLM_ENABLED=true
 set LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 set LLM_API_KEY=sk-xxx
-set LLM_MODEL=qwen3.7-plus
-set LLM_MAX_TOKENS=256
-set LLM_TEMPERATURE=0.8
-set LLM_TIMEOUT_SECONDS=30
+set LLM_MODEL=qwen-plus
+set LLM_MAX_TOKENS=512
 mvn -B spring-boot:run -pl services/core
 ```
 
