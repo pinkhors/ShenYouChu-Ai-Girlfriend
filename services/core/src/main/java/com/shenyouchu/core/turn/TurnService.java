@@ -5,6 +5,7 @@ import com.shenyouchu.core.activity.ActivityService;
 import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
+import com.shenyouchu.core.memory.MemoryService;
 import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.dto.MessageView;
 import com.shenyouchu.core.message.mapper.MessageMapper;
@@ -26,17 +27,20 @@ public class TurnService {
     private final PersonaService personaService;
     private final ReplyGenerator replyGenerator;
     private final ActivityService activityService;
+    private final MemoryService memoryService;
 
     public TurnService(ConversationMapper conversationMapper,
                        MessageMapper messageMapper,
                        PersonaService personaService,
                        ReplyGenerator replyGenerator,
-                       ActivityService activityService) {
+                       ActivityService activityService,
+                       MemoryService memoryService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.personaService = personaService;
         this.replyGenerator = replyGenerator;
         this.activityService = activityService;
+        this.memoryService = memoryService;
     }
 
     @Transactional
@@ -48,6 +52,11 @@ public class TurnService {
         messageMapper.insert(userMessage);
         activityService.record(userId, "message.sent", "USER", "core", conversationId, turnId, null,
                 Map.of("messageId", String.valueOf(userMessage.getId()), "role", "user"));
+
+        if (memoryService.rememberFromTurn(userId, conversationId, userMessage.getId(), text)) {
+            activityService.record(userId, "memory.created", "SYSTEM", "core", conversationId, turnId, null,
+                    Map.of("sourceMessageId", String.valueOf(userMessage.getId())));
+        }
 
         String prompt = personaService.systemPrompt(conversation.getCharacterId());
         String reply = replyGenerator.generate(prompt, text);

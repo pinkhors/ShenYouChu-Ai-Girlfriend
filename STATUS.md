@@ -106,3 +106,21 @@ pnpm --filter shenyouchu-desktop dev
 1. 基础记忆：`memories` 实体/接口、轮次结束后的异步整理（先确定性实现，后接 LLM）；
 2. 流式输出：SSE 或 WebSocket 按契约下发 `turn.*` 事件；
 3. 扩展 `scripts/verify-m0.ps1` 覆盖消息、记忆、活动事件与越权。
+
+## Round 3 进展（2026-10-28）
+
+已实现并验证：
+
+- 记忆模块：`memories` 实体/Mapper/Service/Controller，确定性关键词提取（preference / event），`GET /api/v1/memories`、`DELETE /api/v1/memories/{id}`；
+- SSE 流式轮次：`POST /api/v1/conversations/{id}/turns/stream`，事件序列 `turn.started` → `assistant.text.delta` → `turn.completed`，与契约事件名一致；
+- 轮次内联动：保存用户/AI 消息、按规则写入记忆、记录 `message.sent` / `memory.created` / `turn.completed` 活动事件、更新 `last_message_at`；
+- 验收脚本：新增 `scripts/verify-m1.ps1`（消息、记忆、活动事件、越权、SSE）；
+- 验证：`mvn -DskipTests package` 通过；`MemoryHeuristicTest`、`SimplePersonaReplyGeneratorTest`、`TokenHasherTest` 全部通过。
+
+已知限制：`ReplyGenerator` 目前是确定性占位实现，未接入真实 LLM；SSE 是"先落库再分片下发"，接入流式 LLM 后改为边生成边下发，客户端协议不变。
+
+下一轮：
+
+1. 扩展 `verify-m1.ps1` 到可本地实际执行（需要 MySQL 运行）；
+2. 接入 LLM 适配器（DashScope 或本地 OpenAI 兼容端点），保持 `ReplyGenerator` 接口；
+3. 桌面端接入消息列表与流式显示。
