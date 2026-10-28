@@ -45,7 +45,11 @@ function createMainWindow(): BrowserWindow {
 
   const rendererDevServerUrl = process.env.ELECTRON_RENDERER_URL
   if (rendererDevServerUrl !== undefined && rendererDevServerUrl !== '') {
-    void mainWindow.loadURL(rendererDevServerUrl)
+    /**
+     * 统一走 IPv4：Windows 下 localhost 可能解析为 ::1，
+     * 而开发服务器绑定在 127.0.0.1，直接加载 localhost 会 ERR_CONNECTION_REFUSED。
+     */
+    void mainWindow.loadURL(rendererDevServerUrl.replace('://localhost', '://127.0.0.1'))
   } else {
     /* 生产/预览：使用 app.getAppPath() 而非 __dirname，因为主进程产物是 ESM */
     void mainWindow.loadFile(join(app.getAppPath(), 'out', 'renderer', 'index.html'))

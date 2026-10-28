@@ -28,6 +28,15 @@ export default defineConfig({
   renderer: {
     root: 'src/renderer',
     plugins: [react()],
+    server: {
+      /**
+       * 显式绑定 IPv4：Windows 上 localhost 可能优先解析为 ::1，
+       * 而 Vite 默认只监听 127.0.0.1，会出现 ERR_CONNECTION_REFUSED。
+       */
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: true
+    },
     build: {
       outDir: 'out/renderer',
       /* outDir 在 root 之外，需要显式允许清空，避免旧产物残留 */

@@ -532,3 +532,16 @@ DEMO VERIFICATION PASSED: all 4 steps
 前端：`tsc --noEmit` exit 0；`npm test` 18 passed / 0 failed。后端：8 个测试类通过；`mvn package` BUILD SUCCESS。
 
 按用户要求：本轮结束后停止 AI 启动的所有服务，由用户自行启动前后端进行手动测试。
+
+## 修复：开发服务器 IPv4/IPv6 不一致导致 ERR_CONNECTION_REFUSED（2026-10-28）
+
+现象：`npm run dev` 正常输出 Vite 地址，但 Electron 窗口/浏览器显示 localhost 拒绝连接。
+
+原因：Windows 上 `localhost` 可能优先解析为 IPv6 `::1`，而 Vite 默认只监听 `127.0.0.1`（IPv4）。
+
+修复：
+
+- `electron.vite.config.ts`：renderer server 显式 `host: '127.0.0.1'`、`port: 5173`、`strictPort: true`；
+- `src/main/index.ts`：加载 `ELECTRON_RENDERER_URL` 时把 `://localhost` 归一化为 `://127.0.0.1`。
+
+验证：`tsc --noEmit` exit 0。（本机需重启 `npm run dev` 生效）
