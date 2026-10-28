@@ -24,7 +24,7 @@ public class CharacterProfile extends BaseEntity {
     @TableField("is_public")
     private Boolean publicVisible;
 
-    protected CharacterProfile() {
+    public CharacterProfile() {
     }
 
     public Long getId() {
