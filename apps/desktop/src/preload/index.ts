@@ -15,6 +15,8 @@ const DEFAULT_API_BASE_URL = 'http://127.0.0.1:48080'
 
 /** window.desktop 的契约，由渲染进程以类型方式引用（src/renderer/src/env.d.ts）。 */
 export interface DesktopBridge {
+  /** 渲染层用它判断 preload 是否为新版本；preload 改动不会 HMR。 */
+  readonly bridgeVersion: number
   readonly platform: string
   readonly apiBaseUrl: string
   /** 出图请求走主进程，避免渲染进程 CORS 并让密钥不进入页面代码。 */
@@ -39,6 +41,7 @@ function resolveApiBaseUrl(): string {
 }
 
 const bridge: DesktopBridge = Object.freeze({
+  bridgeVersion: 2,
   platform: process.platform,
   apiBaseUrl: resolveApiBaseUrl(),
   imagegen: Object.freeze({

@@ -703,3 +703,13 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
 未验证：抠图对复杂背景的实际效果、聊天页视觉（沙箱无法启动 Electron）。
+
+## Round 38：生图桥接诊断（2026-10-28）
+
+- 修复“没有检测到出图通道”的误导：区分「浏览器标签页」与「Electron preload 过旧」两种情况，提示完全退出后重开 `npm run dev`（preload 不参与 HMR）；
+- preload 增加 `bridgeVersion=2`，渲染层可判断桥接是否为新版本；
+- 生图面板模型字段明确为“图像模型（不是聊天模型）”，并提示 `kimi-k3` 等聊天模型不能走 `images/generations`；
+- README 增加两条故障排查：旧 preload / 浏览器打开、云 API 模型或接口不支持。
+
+验证：`tsc --noEmit` exit 0；`npm test` 58 passed；`npm run build` 仍被沙箱 esbuild `spawn EPERM` 阻止，需本机重启 dev 让 preload 重新构建。
+本轮无 SQL 变更。

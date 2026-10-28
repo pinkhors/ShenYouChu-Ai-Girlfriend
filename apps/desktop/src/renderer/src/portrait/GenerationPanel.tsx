@@ -76,11 +76,14 @@ export default function GenerationPanel({ onSave }: GenerationPanelProps) {
   }
 
   const generateOne = async (expression: PortraitExpression, promptText: string): Promise<void> => {
-    const bridge = window.desktop?.imagegen
-    if (bridge === undefined) {
-      throw new Error('没有检测到出图通道，请用 npm run dev 启动桌面端')
+    const desktop = window.desktop
+    if (desktop === undefined) {
+      throw new Error('当前是浏览器环境：生图需要 Electron 桌面端，请用 npm run dev 打开应用窗口，而不是浏览器标签页')
     }
-    const dataUrl = await bridge.generate({
+    if (desktop.imagegen === undefined || desktop.bridgeVersion !== 2) {
+      throw new Error('桌面端 preload 还是旧版本：请完全退出 Electron 后重新运行 npm run dev（preload 改动不会热更新）')
+    }
+    const dataUrl = await desktop.imagegen.generate({
       provider: config.provider,
       baseUrl: config.baseUrl,
       model: config.model,
@@ -188,12 +191,12 @@ export default function GenerationPanel({ onSave }: GenerationPanelProps) {
         </div>
 
         <label className="gen__field">
-          <span>{config.provider === 'comfyui' ? 'Checkpoint' : '模型'}</span>
+          <span>{config.provider === 'comfyui' ? 'Checkpoint' : '图像模型（不是聊天模型）'}</span>
           <input
             className="creator__input"
             type="text"
             value={config.model}
-            placeholder={config.provider === 'comfyui' ? 'sd_xl_base_1.0.safetensors' : 'gpt-image-1'}
+            placeholder={config.provider === 'comfyui' ? 'sd_xl_base_1.0.safetensors' : 'gpt-image-1 / flux / seedream'}
             disabled={busy !== 'idle'}
             onChange={(event) => {
               update({ model: event.target.value })
@@ -386,7 +389,8 @@ export default function GenerationPanel({ onSave }: GenerationPanelProps) {
         )}
 
         <p className="gen__hint">
-          ComfyUI 需要先启动并填对 checkpoint；云 API 的地址要包含 <code>/v1</code>。整组生成会逐张写入槽位，中途可停止。
+          ComfyUI 需要先启动并填对 checkpoint；云 API 的地址要包含 <code>/v1</code>，模型必须是支持
+          <code>images/generations</code> 的图像模型（kimi 等聊天模型不能生图）。整组生成会逐张写入槽位，中途可停止。
         </p>
       </div>
     </details>
