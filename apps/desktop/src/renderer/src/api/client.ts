@@ -405,3 +405,15 @@ export function cancelTurn(conversationId: string, turnId: string): Promise<void
     { method: 'POST' }
   )
 }
+
+export interface CharacterState {
+  readonly characterId: string
+  readonly mood: number
+  readonly intimacy: number
+  readonly stateVersion: number
+}
+
+/** 当前用户与默认角色的关系状态。 */
+export function getCharacterState(): Promise<CharacterState> {
+  return request<CharacterState>('/character-state')
+}

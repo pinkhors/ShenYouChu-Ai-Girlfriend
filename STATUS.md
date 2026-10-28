@@ -304,3 +304,27 @@ character-state：mood 53、intimacy 2
 测试：`RelationshipRulesTest` 等 7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS。
 
 下一轮：桌面端展示心情/亲密度；删除账号的全存储级联设计（Redis/Milvus/MinIO 抽象）。
+
+## Round 14 进展（2026-10-28）
+
+已实现并验证：
+
+- 账号删除（FR-7.3）：`POST /api/v1/account/deletion`，MySQL 内用户/会话/消息/记忆/关系状态逻辑删除，
+  会话立即失效，写入 `data.deletion_requested` / `data.deletion_completed` 审计事件；
+- 派生存储清理 seam：`AccountPurgePort` + `NoOpAccountPurgePort`（Redis/Milvus/对象存储接入时替换）；
+- 桌面端展示关系状态：顶栏显示「心情 / 亲密」，登录后加载、从会话详情返回时刷新；
+- 新验收脚本 `scripts/verify-account-deletion.ps1`；契约与验收清单同步。
+
+真实环境验收：
+
+```text
+账号删除 → 204；旧 token → 401；删除后同账号登录 → 401
+用户名因唯一索引仍被保留（同用户名注册 409）—— 已记入验收清单待确认项
+```
+
+回归：`verify-m1.ps1` 全绿（消息/记忆/活动/SSE/取消/关系状态/级联删除/匿名）。
+
+已知限制：用户名保留是逻辑删除 + 唯一索引的必然结果；如需复用用户名，可改为物理删除用户行
+或唯一索引改为 `(username, deleted_at)`，列入待确认项。
+
+下一轮：桌面端「删除账号」入口与二次确认；派生存储清理端口的真实实现（Redis 会话清理优先）。

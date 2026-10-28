@@ -4,12 +4,14 @@ import {
   ApiError,
   createConversation,
   deleteConversation,
+  getCharacterState,
   listConversations,
   login,
   logout,
   me,
   register,
   setOnUnauthorized,
+  type CharacterState,
   type Conversation,
   type UserView
 } from './api/client'
@@ -87,6 +89,7 @@ export default function App() {
   const [newConversationTitle, setNewConversationTitle] = useState('')
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [view, setView] = useState<'conversations' | 'memories' | 'activity'>('conversations')
+  const [characterState, setCharacterState] = useState<CharacterState | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
   useEffect(() => {
@@ -101,6 +104,27 @@ export default function App() {
       setOnUnauthorized(null)
     }
   }, [])
+
+  /* 关系状态：登录后加载；从会话详情返回时刷新（一轮对话会改变心情/亲密度） */
+  useEffect(() => {
+    if (user === null) {
+      setCharacterState(null)
+      return
+    }
+    let cancelled = false
+    void getCharacterState()
+      .then((state) => {
+        if (!cancelled) {
+          setCharacterState(state)
+        }
+      })
+      .catch(() => {
+        /* 状态展示失败不影响主流程 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user, activeConversation])
 
   /* 启动时校验本地令牌：失败即视为未登录，不做静默降级 */
   useEffect(() => {
@@ -370,6 +394,11 @@ export default function App() {
         <div className="topbar__identity">
           <span className="topbar__name">{user.username}</span>
           <span className="badge">{user.role}</span>
+          {characterState !== null && (
+            <span className="badge">
+              心情 {characterState.mood} · 亲密 {characterState.intimacy}
+            </span>
+          )}
         </div>
         <div className="topbar__actions">
           <div className="identity-nav">
