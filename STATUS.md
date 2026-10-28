@@ -66,3 +66,27 @@ pnpm --filter shenyouchu-desktop dev
 - `App.tsx` 461 行，M1 拆分；
 - token 仍存 localStorage，M3 换 safeStorage；
 - `package.json` 的 `pnpm.onlyBuiltDependencies` 仅 pnpm 9 生效，pnpm 12 需 `pnpm approve-builds`。
+
+---
+
+## Round 1 进展（2026-10-28）
+
+已完成并验证：
+
+- `apps/desktop` 类型检查真实通过：`tsc --noEmit` 退出码 0（用 node 直接调用 `node_modules/.pnpm/typescript@5.9.3`）。
+- 依赖包已在 `.pnpm` 中就位（186 个包，含 typescript/electron-vite/vite/@esbuild+win32-x64）。
+
+环境硬边界（非代码问题）：
+
+- esbuild 需要与子进程通过管道通信，沙箱禁止管道，报 `spawn EPERM`；因此 `electron-vite build` 与 Electron GUI 启动无法在沙箱内完成。
+- pnpm 9/12 无法修复现有 `node_modules`：沙箱不允许删除或重命名早期安装生成的目录（EPERM / Directory not empty）。
+- 结论：桌面端的 `typecheck` 已通过；`build`、`dev` 需在你本机执行一次：
+  `npm install`（或 `pnpm install`）后 `npm run build:desktop && npm run dev:desktop`。
+
+下一步（无需等待桌面端构建）：
+
+1. 实现 M1 后端：消息持久化、`POST /conversations/{id}/turns`、`GET /conversations/{id}/messages`；
+2. 人设加载（`characters.persona_config` → system prompt）；
+3. 活动事件查询接口 `GET /api/v1/activity-events`；
+4. 扩展验收脚本覆盖消息与隔离；
+5. 流式输出（SSE/WS）随后接入。
