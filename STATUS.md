@@ -226,3 +226,19 @@ mvn -B spring-boot:run -pl services/core
 - 纯单元测试 5 个类全部通过；`mvn package` BUILD SUCCESS。
 
 下一轮：桌面端本机完整安装 Electron 后联调；M2 真实 ASR/TTS 适配器；可取消轮次。
+
+## Round 10 进展（2026-10-28）
+
+已实现并验证：
+
+- 可取消轮次：`TurnCancellationRegistry`（活动轮次 + 归属校验）、
+  `POST /api/v1/conversations/{id}/turns/{turnId}/cancel`；
+- SSE 在分片间检查取消状态，命中后下发 `turn.cancelled` 并立即结束，finally 清理注册表；
+- 未知轮次、已完成轮次或非归属者取消统一返回 404；
+- 测试：`TurnCancellationRegistryTest`（归属者可取消、他人不可取消、未知轮次、清理）通过；
+  全部 6 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS；
+- 回归：真实环境 `verify-m1.ps1` 再次全部通过（含 SSE `turn.completed`）。
+
+说明：M1 为单实例内存实现；多实例部署时替换为 Redis 并保留同一接口（技术路线中的取消广播）。
+
+下一轮：桌面端取消按钮接入 `streamTurn` 中断；M2 真实 ASR/TTS 适配器。

@@ -32,10 +32,13 @@ public class TurnStreamController {
 
     private final TurnService turnService;
     private final ObjectMapper objectMapper;
+    private final TurnCancellationRegistry cancellationRegistry;
 
-    public TurnStreamController(TurnService turnService, ObjectMapper objectMapper) {
+    public TurnStreamController(TurnService turnService, ObjectMapper objectMapper,
+                                TurnCancellationRegistry cancellationRegistry) {
         this.turnService = turnService;
         this.objectMapper = objectMapper;
+        this.cancellationRegistry = cancellationRegistry;
     }
 
     @PostMapping(value = "/turns/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -45,18 +48,26 @@ public class TurnStreamController {
         SseEmitter emitter = new SseEmitter(60_000L);
 
         CompletableFuture.runAsync(() -> {
+            String turnId = null;
             try {
                 TurnResponse response = turnService.send(userId, conversationId, text);
-                send(emitter, "turn.started", Map.of("turnId", response.turnId()));
+                turnId = response.turnId();
+                cancellationRegistry.register(turnId, userId);
+                send(emitter, "turn.started", Map.of("turnId", turnId));
 
                 String content = response.assistantMessage().content();
                 for (int index = 0; index < content.length(); index += CHUNK_SIZE) {
+                    if (cancellationRegistry.isCancelled(turnId)) {
+                        send(emitter, "turn.cancelled", Map.of("turnId", turnId, "reason", "user"));
+                        emitter.complete();
+                        return;
+                    }
                     String delta = content.substring(index, Math.min(index + CHUNK_SIZE, content.length()));
                     send(emitter, "assistant.text.delta", Map.of("delta", delta));
                     Thread.sleep(20L);
                 }
                 send(emitter, "turn.completed", Map.of(
-                        "turnId", response.turnId(),
+                        "turnId", turnId,
                         "messageId", response.assistantMessage().id()));
                 emitter.complete();
             } catch (Exception ex) {
@@ -69,6 +80,10 @@ public class TurnStreamController {
                     /* 客户端可能已断开，忽略二次发送失败 */
                 }
                 emitter.complete();
+            } finally {
+                if (turnId != null) {
+                    cancellationRegistry.clear(turnId);
+                }
             }
         });
         return emitter;
