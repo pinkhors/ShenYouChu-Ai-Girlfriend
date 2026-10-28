@@ -4,15 +4,13 @@ import {
   cancelTurn,
   listMessages,
   streamTurn,
-  textToBase64,
-  voiceTurn,
   type CharacterState,
   type Conversation,
   type Message
 } from './api/client'
 import type { AvatarConfig } from './avatar/avatarConfig'
 import AvatarPortrait from './portrait/AvatarPortrait'
-import type { PortraitSet } from './portrait/expression'
+import { resolvePortrait, type PortraitSet } from './portrait/expression'
 import Icon from './ui/Icon'
 import { formatClock, formatTime } from './ui/time'
 
@@ -20,6 +18,7 @@ interface ChatViewProps {
   readonly conversation: Conversation
   readonly avatar: AvatarConfig
   readonly portraits: PortraitSet | null
+  readonly heroImage: string | null
   readonly characterState: CharacterState | null
   readonly userName: string
   readonly onCall: () => void
@@ -46,6 +45,7 @@ export default function ChatView({
   conversation,
   avatar,
   portraits,
+  heroImage,
   characterState,
   userName,
   onCall
@@ -56,7 +56,7 @@ export default function ChatView({
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
-  const [voiceNotice, setVoiceNotice] = useState<string | null>(null)
+  const [heroFailed, setHeroFailed] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const activeTurnIdRef = useRef<string | null>(null)
@@ -115,7 +115,6 @@ export default function ChatView({
 
     setDraft('')
     setError(null)
-    setVoiceNotice(null)
     setStreamingText('')
     setIsSending(true)
 
@@ -166,30 +165,6 @@ export default function ChatView({
         /* 轮次可能已自然结束，取消失败不影响界面 */
       })
     }
-    setVoiceNotice('已停止本轮生成。')
-  }
-
-  const handleVoicePlaceholder = async (): Promise<void> => {
-    const text = draft.trim()
-    if (text === '' || isSending) {
-      return
-    }
-    setDraft('')
-    setError(null)
-    setVoiceNotice(null)
-    setIsSending(true)
-    try {
-      const result = await voiceTurn(conversation.id, textToBase64(text))
-      setVoiceNotice(
-        `识别为「${result.recognizedText}」（置信度 ${result.confidence}）。` +
-          (result.ttsFormat === 'none' ? '当前为占位语音，未合成音频。' : `语音格式：${result.ttsFormat}`)
-      )
-      await load()
-    } catch (voiceError) {
-      setError(toMessage(voiceError))
-    } finally {
-      setIsSending(false)
-    }
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -206,47 +181,72 @@ export default function ChatView({
 
   const isEmpty = messages.length === 0 && streamingText === ''
   const hasMessages = messages.length > 0 || streamingText !== ''
+  const heroSource = heroImage ?? resolvePortrait(portraits, 'neutral')
 
   return (
-    <section className="chat" aria-label={`与沈幼楚的会话：${conversation.title ?? '未命名会话'}`}>
-      <header className="chat__header">
-        <span className="chat__avatar">
-          <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
-        </span>
-        <div className="chat__identity">
-          <h1 className="chat__name">沈幼楚</h1>
-          <p className="chat__meta">
-            在线 · {conversation.title ?? '未命名会话'}
-            {conversation.status !== 'active' && ` · ${conversation.status}`}
-          </p>
+    <section className="chat chat--rose" aria-label={`与沈幼楚的会话：${conversation.title ?? '未命名会话'}`}>
+      <header className="chat__topbar">
+        <div className="chat__brand">
+          <span className="chat__heart" aria-hidden="true">
+            ♥
+          </span>
+          <span className="chat__name">沈幼楚</span>
+          <span className="chat__online">在线</span>
         </div>
-        <div className="chat__actions">
+        <div className="chat__top-actions">
+          <div className="chat__chips">
+            {characterState !== null && (
+              <>
+                <span className="chip" title={`心情 ${characterState.mood}`}>
+                  心情
+                  <span className="chip__bar">
+                    <span className="chip__fill chip__fill--mood" style={{ width: `${clampPercent(characterState.mood)}%` }} />
+                  </span>
+                  {characterState.mood}
+                </span>
+                <span className="chip" title={`亲密度 ${characterState.intimacy}`}>
+                  亲密
+                  <span className="chip__bar">
+                    <span className="chip__fill chip__fill--intimacy" style={{ width: `${clampPercent(characterState.intimacy)}%` }} />
+                  </span>
+                  {characterState.intimacy}
+                </span>
+              </>
+            )}
+          </div>
           <button className="chat__call" type="button" onClick={onCall}>
             <Icon name="phone" size={17} />
             通话
           </button>
         </div>
-        <div className="chat__chips">
-          {characterState !== null && (
-            <>
-              <span className="chip" title={`心情 ${characterState.mood}`}>
-                心情
-                <span className="chip__bar">
-                  <span className="chip__fill chip__fill--mood" style={{ width: `${clampPercent(characterState.mood)}%` }} />
-                </span>
-                {characterState.mood}
-              </span>
-              <span className="chip" title={`亲密度 ${characterState.intimacy}`}>
-                亲密
-                <span className="chip__bar">
-                  <span className="chip__fill chip__fill--intimacy" style={{ width: `${clampPercent(characterState.intimacy)}%` }} />
-                </span>
-                {characterState.intimacy}
-              </span>
-            </>
-          )}
-        </div>
       </header>
+
+      <section className="chat__hero">
+        <div className="chat__hero-glow" aria-hidden="true" />
+        {heroSource !== null && heroFailed !== heroSource ? (
+          <img
+            className={heroImage !== null ? 'chat__hero-image chat__hero-image--cutout' : 'chat__hero-image'}
+            src={heroSource}
+            alt="沈幼楚"
+            draggable={false}
+            onError={() => {
+              setHeroFailed(heroSource)
+            }}
+          />
+        ) : (
+          <div className="chat__hero-fallback">
+            <AvatarPortrait config={avatar} portraits={portraits} variant="portrait" />
+          </div>
+        )}
+        <div className="chat__hero-caption">
+          <strong>沈幼楚</strong>
+          <span>{conversation.title ?? '今天也在陪你'}</span>
+        </div>
+        <button className="chat__hero-call" type="button" onClick={onCall}>
+          <Icon name="mic" size={18} />
+          语音通话
+        </button>
+      </section>
 
       <div className="chat__messages">
         {error !== null && (
@@ -272,9 +272,6 @@ export default function ChatView({
           <p className="muted chat__placeholder">正在加载消息…</p>
         ) : isEmpty ? (
           <div className="chat__empty">
-            <span className="chat__empty-avatar">
-              <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
-            </span>
             <p className="chat__empty-title">还没有消息</p>
             <p className="muted">说点什么开始吧，她会记住你在意的事。</p>
             <div className="suggestions">
@@ -334,13 +331,11 @@ export default function ChatView({
         <div ref={bottomRef} />
       </div>
 
-      {voiceNotice !== null && <p className="chat__notice">{voiceNotice}</p>}
-
-      <form className="composer" onSubmit={handleSubmit}>
+      <form className="composer composer--rose" onSubmit={handleSubmit}>
         <textarea
           className="composer__input"
           rows={1}
-          placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"
+          placeholder="给沈幼楚发送消息…（Enter 发送，Shift+Enter 换行）"
           maxLength={2000}
           value={draft}
           disabled={isSending}
@@ -350,12 +345,9 @@ export default function ChatView({
         <button
           className="composer__icon"
           type="button"
-          title="语音（M2 占位：把输入文本按语音轮次提交）"
-          aria-label="语音（占位）"
-          disabled={isSending || draft.trim() === ''}
-          onClick={() => {
-            void handleVoicePlaceholder()
-          }}
+          title="进入语音通话"
+          aria-label="进入语音通话"
+          onClick={onCall}
         >
           <Icon name="mic" size={20} />
         </button>

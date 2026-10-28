@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import Icon from '../ui/Icon'
+import { cutoutPortrait } from './cutout'
 import {
   PORTRAIT_SLOTS,
   resolvePortrait,
@@ -11,6 +12,9 @@ import { fileToDataUrl } from './image'
 
 interface PortraitStudioProps {
   readonly portraits: PortraitSet | null
+  readonly heroImage: string | null
+  readonly onSetHero: (dataUrl: string) => Promise<boolean>
+  readonly onClearHero: () => Promise<boolean>
   /** 导入一张表情图；返回 false 表示持久化失败。 */
   readonly onImport: (slot: PortraitExpression, dataUrl: string) => Promise<boolean>
   readonly onRemove: (slot: PortraitExpression) => Promise<boolean>
@@ -18,9 +22,18 @@ interface PortraitStudioProps {
 }
 
 /** 形象页的“立绘”tab：导入 AI 立绘与表情差分，通话页直接复用这套图。 */
-export default function PortraitStudio({ portraits, onImport, onRemove, onClear }: PortraitStudioProps) {
+export default function PortraitStudio({
+  portraits,
+  heroImage,
+  onSetHero,
+  onClearHero,
+  onImport,
+  onRemove,
+  onClear
+}: PortraitStudioProps) {
   const [selected, setSelected] = useState<PortraitExpression>('neutral')
   const [busy, setBusy] = useState<PortraitExpression | 'clear' | null>(null)
+  const [cuttingOut, setCuttingOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pendingSlot = useRef<PortraitExpression | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -95,6 +108,40 @@ export default function PortraitStudio({ portraits, onImport, onRemove, onClear 
     }
   }
 
+  const handleCutout = async (): Promise<void> => {
+    const base = resolvePortrait(portraits, 'neutral')
+    if (base === null) {
+      setError('请先导入基础立绘，再抠出人物。')
+      return
+    }
+    setError(null)
+    setCuttingOut(true)
+    try {
+      const cutout = await cutoutPortrait(base)
+      const saved = await onSetHero(cutout)
+      if (!saved) {
+        setError('抠图成功，但保存聊天形象失败，请重试。')
+      }
+    } catch (cutoutError) {
+      setError(cutoutError instanceof Error ? cutoutError.message : '抠图失败')
+    } finally {
+      setCuttingOut(false)
+    }
+  }
+
+  const handleClearHero = async (): Promise<void> => {
+    setError(null)
+    setCuttingOut(true)
+    try {
+      const cleared = await onClearHero()
+      if (!cleared) {
+        setError('清除聊天形象失败，请重试。')
+      }
+    } finally {
+      setCuttingOut(false)
+    }
+  }
+
   return (
     <section className="studio" aria-label="立绘导入">
       <input
@@ -145,6 +192,43 @@ export default function PortraitStudio({ portraits, onImport, onRemove, onClear 
             {error}
           </p>
         )}
+
+        <div className="hero-cutout">
+          <div className="hero-cutout__head">
+            <span className="hero-cutout__title">聊天页人物</span>
+            {heroImage !== null && (
+              <button
+                className="hero-cutout__clear"
+                type="button"
+                disabled={cuttingOut}
+                onClick={() => {
+                  void handleClearHero()
+                }}
+              >
+                清除
+              </button>
+            )}
+          </div>
+          {heroImage !== null ? (
+            <div className="hero-cutout__preview">
+              <img src={heroImage} alt="聊天页人物预览" />
+            </div>
+          ) : (
+            <p className="hero-cutout__empty">从基础立绘里抠出人物，聊天页顶部会用它展示。</p>
+          )}
+          <button
+            className="btn btn--ghost btn--sm"
+            type="button"
+            disabled={resolvePortrait(portraits, 'neutral') === null || cuttingOut}
+            onClick={() => {
+              void handleCutout()
+            }}
+          >
+            <Icon name="sparkles" size={15} />
+            {cuttingOut ? '处理中…' : heroImage === null ? '抠出人物' : '重新抠图'}
+          </button>
+          <p className="hero-cutout__hint">纯色/简单背景效果最好；复杂背景会残留。</p>
+        </div>
 
         <GenerationPanel onSave={onImport} />
 

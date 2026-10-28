@@ -28,7 +28,7 @@ import MemoryPanel from './MemoryPanel'
 import AvatarPortrait from './portrait/AvatarPortrait'
 import CallView from './portrait/CallView'
 import type { PortraitExpression, PortraitSet } from './portrait/expression'
-import { clearPortraits, loadPortraits, removePortrait, savePortrait } from './portrait/portraitStorage'
+import { clearHeroImage, clearPortraits, loadHeroImage, loadPortraits, removePortrait, saveHeroImage, savePortrait } from './portrait/portraitStorage'
 import SettingsPanel from './SettingsPanel'
 import Icon, { type IconName } from './ui/Icon'
 
@@ -123,6 +123,7 @@ export default function App() {
   const [characterState, setCharacterState] = useState<CharacterState | null>(null)
   const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR)
   const [portraits, setPortraits] = useState<PortraitSet | null>(null)
+  const [heroImage, setHeroImage] = useState<string | null>(null)
   const [portraitsLoading, setPortraitsLoading] = useState(false)
   const [callOpen, setCallOpen] = useState(false)
   const [chatVersion, setChatVersion] = useState(0)
@@ -137,6 +138,7 @@ export default function App() {
       setActiveConversation(null)
       setCharacterState(null)
       setPortraits(null)
+      setHeroImage(null)
       setCallOpen(false)
       setSection('chats')
       setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '登录状态已失效，请重新登录' })
@@ -177,21 +179,24 @@ export default function App() {
     setAvatar(getAvatar(user.id))
   }, [user])
 
-  /* 立绘：登录后从 IndexedDB 读取，按用户隔离 */
+  /* 立绘与聊天主视觉：登录后从 IndexedDB 读取，按用户隔离 */
   useEffect(() => {
     if (user === null) {
       setPortraits(null)
+      setHeroImage(null)
       setPortraitsLoading(false)
       return
     }
     let cancelled = false
-    /* 切换用户时先清掉上一位的立绘，加载完成前由调用方显示加载态 */
+    /* 切换用户时先清掉上一位的状态，加载完成前由调用方显示加载态 */
     setPortraits(null)
+    setHeroImage(null)
     setPortraitsLoading(true)
-    void loadPortraits(user.id)
-      .then((loaded) => {
+    void Promise.all([loadPortraits(user.id), loadHeroImage(user.id)])
+      .then(([loaded, hero]) => {
         if (!cancelled) {
           setPortraits(loaded)
+          setHeroImage(hero)
           setPortraitsLoading(false)
         }
       })
@@ -199,6 +204,7 @@ export default function App() {
         /* 读取失败按没有立绘处理，界面回退矢量形象 */
         if (!cancelled) {
           setPortraits(null)
+          setHeroImage(null)
           setPortraitsLoading(false)
         }
       })
@@ -348,6 +354,7 @@ export default function App() {
       setActiveConversation(null)
       setCharacterState(null)
       setPortraits(null)
+      setHeroImage(null)
       setCallOpen(false)
       setSection('chats')
       setAuth(INITIAL_AUTH_STATE)
@@ -383,6 +390,7 @@ export default function App() {
     setCharacterState(null)
     setActiveConversation(null)
     setPortraits(null)
+    setHeroImage(null)
     setCallOpen(false)
     setSection('chats')
     setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '账号已删除，感谢你的陪伴' })
@@ -441,6 +449,7 @@ export default function App() {
     }
     setAvatar(DEFAULT_AVATAR)
     setPortraits(null)
+    setHeroImage(null)
   }
 
   const handleImportPortrait = async (
@@ -486,12 +495,43 @@ export default function App() {
       return false
     }
     setPortraits(null)
+    setHeroImage(null)
     try {
       await clearPortraits(user.id)
       return true
     } catch {
       const stored = await loadPortraits(user.id).catch(() => null)
       setPortraits(stored)
+      return false
+    }
+  }
+
+  const handleSetHero = async (dataUrl: string): Promise<boolean> => {
+    if (user === null) {
+      return false
+    }
+    const previous = heroImage
+    setHeroImage(dataUrl)
+    try {
+      await saveHeroImage(user.id, dataUrl)
+      return true
+    } catch {
+      setHeroImage(previous)
+      return false
+    }
+  }
+
+  const handleClearHero = async (): Promise<boolean> => {
+    if (user === null) {
+      return false
+    }
+    const previous = heroImage
+    setHeroImage(null)
+    try {
+      await clearHeroImage(user.id)
+      return true
+    } catch {
+      setHeroImage(previous)
       return false
     }
   }
@@ -688,6 +728,7 @@ export default function App() {
               conversation={activeConversation}
               avatar={avatar}
               portraits={portraits}
+              heroImage={heroImage}
               characterState={characterState}
               userName={user.username}
               onCall={() => {
@@ -709,6 +750,9 @@ export default function App() {
             onSave={handleSaveAvatar}
             portraits={portraits}
             portraitsLoading={portraitsLoading}
+            heroImage={heroImage}
+            onSetHero={handleSetHero}
+            onClearHero={handleClearHero}
             onImportPortrait={handleImportPortrait}
             onRemovePortrait={handleRemovePortrait}
             onClearPortraits={handleClearPortraits}

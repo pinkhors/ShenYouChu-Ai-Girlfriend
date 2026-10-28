@@ -10,6 +10,9 @@ interface LookPageProps {
   readonly onSave: (next: AvatarConfig) => void
   readonly portraits: PortraitSet | null
   readonly portraitsLoading: boolean
+  readonly heroImage: string | null
+  readonly onSetHero: (dataUrl: string) => Promise<boolean>
+  readonly onClearHero: () => Promise<boolean>
   readonly onImportPortrait: (slot: PortraitExpression, dataUrl: string) => Promise<boolean>
   readonly onRemovePortrait: (slot: PortraitExpression) => Promise<boolean>
   readonly onClearPortraits: () => Promise<boolean>
@@ -23,6 +26,9 @@ export default function LookPage({
   onSave,
   portraits,
   portraitsLoading,
+  heroImage,
+  onSetHero,
+  onClearHero,
   onImportPortrait,
   onRemovePortrait,
   onClearPortraits
@@ -75,6 +81,9 @@ export default function LookPage({
         {tab === 'portrait' ? (
           <PortraitStudio
             portraits={portraits}
+            heroImage={heroImage}
+            onSetHero={onSetHero}
+            onClearHero={onClearHero}
             onImport={onImportPortrait}
             onRemove={onRemovePortrait}
             onClear={onClearPortraits}

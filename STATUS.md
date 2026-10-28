@@ -692,3 +692,14 @@ DEMO VERIFICATION PASSED: all 4 steps
 - GitHub 推送被沙箱拒绝：`cannot create standard input pipe for remote-https: Permission denied`，需本机执行 `git push origin main`。
 
 本轮 SQL 变更：新增表 `user_llm_settings`（无删表/改列/数据迁移）。Flyway 已记录，后续启动不会重复执行。
+
+## Round 37：粉色聊天页 + 立绘抠图主视觉（2026-10-28）
+
+- 聊天页改为粉色陪伴主题：顶部品牌/在线状态、大面积人物主视觉、粉色助手气泡、白色用户气泡、粉色输入栏；
+- 「形象 → 聊天页人物」新增抠图：对基础立绘做边缘漫水填充去背景、裁剪人物包围盒，生成透明 WebP 存 IndexedDB（`portrait` 记录的 `hero` 键）；
+- 聊天页主视觉优先级：抠图 → 基础立绘 → 矢量形象；图片解码失败回退；
+- 输入栏麦克风改为进入通话，移除聊天页旧的“文本转语音占位”按钮；
+- 本轮无 SQL/表结构变更。
+
+验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
+未验证：抠图对复杂背景的实际效果、聊天页视觉（沙箱无法启动 Electron）。

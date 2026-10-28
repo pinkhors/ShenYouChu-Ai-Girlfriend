@@ -161,3 +161,38 @@ export async function removePortrait(userId: string, slot: PortraitExpression): 
 export async function clearPortraits(userId: string): Promise<void> {
   await deleteRecord(userId)
 }
+
+/* ---------------- 聊天页主视觉（抠图） ---------------- */
+
+const HERO_KEY = 'hero'
+
+export async function loadHeroImage(userId: string): Promise<string | null> {
+  try {
+    const record = await readRecord(userId)
+    const hero = record?.images[HERO_KEY]
+    return typeof hero === 'string' && hero !== '' ? hero : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveHeroImage(userId: string, dataUrl: string): Promise<void> {
+  const record = await readRecord(userId)
+  const images: Record<string, string> = { ...(record?.images ?? {}) }
+  images[HERO_KEY] = dataUrl
+  await writeRecord({ userId, images })
+}
+
+export async function clearHeroImage(userId: string): Promise<void> {
+  const record = await readRecord(userId)
+  if (record === null) {
+    return
+  }
+  const images: Record<string, string> = { ...record.images }
+  delete images[HERO_KEY]
+  if (Object.keys(images).length === 0) {
+    await deleteRecord(userId)
+    return
+  }
+  await writeRecord({ userId, images })
+}
