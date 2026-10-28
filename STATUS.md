@@ -281,3 +281,26 @@ SSE turn.completed；取消未知轮次 404；bob 取消 alice 轮次 404；匿�
 ```
 
 下一轮：里程碑收尾核对（README 状态、STATUS 汇总），并尝试在本机条件下验证桌面端构建的替代方案。
+
+## Round 13 进展（2026-10-28）
+
+已实现并验证：
+
+- 情绪/关系状态机（FR-2.3）：`UserCharacterState` + `RelationshipRules`（心情有界增减、亲密度每轮 +1 上限 100、
+  `@Version` 乐观锁），`GET /api/v1/character-state`；每轮记录 `relationship.updated` 活动事件；
+- 会话删除级联（FR-7.3 最小闭环）：删除会话时逻辑删除其消息与记忆，事件 payload 记录删除数量；
+- 契约与验收清单同步更新（新接口、新事件类型、FR-2.3 状态改为已验收）。
+
+真实环境验收（`verify-m1.ps1`，本轮全部通过）：
+
+```text
+消息 2；记忆 preference；活动事件 6（含 relationship.updated）
+bob 读消息/删记忆 404；SSE turn.completed；取消未知轮次 404；bob 取消 404
+character-state：mood 53、intimacy 2
+删除会话后消息 404、该会话记忆残留 0
+匿名 401
+```
+
+测试：`RelationshipRulesTest` 等 7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS。
+
+下一轮：桌面端展示心情/亲密度；删除账号的全存储级联设计（Redis/Milvus/MinIO 抽象）。

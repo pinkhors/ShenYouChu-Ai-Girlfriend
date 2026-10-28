@@ -1,4 +1,4 @@
-# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
+﻿# M1 verification: conversation turns, messages, memories, activity events, isolation, SSE.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/verify-m1.ps1
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
@@ -116,6 +116,25 @@ try {
 }
 
 Write-Host ""
+Write-Host "==> character state (expect intimacy >= 1)"
+$state = Invoke-Api -Method Get -Path "/api/v1/character-state" -Token $alice.token
+Write-Host "mood: $($state.mood)  intimacy: $($state.intimacy)"
+if ($state.intimacy -lt 1) { Write-Host "FAIL: intimacy did not increase"; exit 1 }
+Write-Host "OK: relationship state updated"
+
+Write-Host ""
+Write-Host "==> delete conversation cascades (expect messages 404, no memory left)"
+Invoke-Api -Method Delete -Path "/api/v1/conversations/$($conv.id)" -Token $alice.token | Out-Null
+try {
+    Invoke-Api -Method Get -Path "/api/v1/conversations/$($conv.id)/messages" -Token $alice.token | Out-Null
+    Write-Host "FAIL: messages still readable after delete"
+} catch {
+    Write-Host "OK: messages gone, HTTP $(Status-Code $_)"
+}
+$remaining = @(Invoke-Api -Method Get -Path "/api/v1/memories" -Token $alice.token | Where-Object { $_.conversationId -eq "$($conv.id)" })
+Write-Host "memories left for deleted conversation: $($remaining.Count)"
+
+Write-Host ""
 Write-Host "==> anonymous request (expect 401)"
 try {
     Invoke-Api -Method Get -Path "/api/v1/memories" | Out-Null
@@ -126,4 +145,5 @@ try {
 
 Write-Host ""
 Write-Host "M1 verification finished."
+
 

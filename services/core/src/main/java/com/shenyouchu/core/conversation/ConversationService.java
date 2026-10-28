@@ -8,6 +8,10 @@ import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.dto.ConversationView;
 import com.shenyouchu.core.conversation.dto.CreateConversationRequest;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
+import com.shenyouchu.core.memory.Memory;
+import com.shenyouchu.core.memory.mapper.MemoryMapper;
+import com.shenyouchu.core.message.Message;
+import com.shenyouchu.core.message.mapper.MessageMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +26,19 @@ public class ConversationService {
     private final ConversationMapper conversationMapper;
     private final CharacterMapper characterMapper;
     private final ActivityService activityService;
+    private final MessageMapper messageMapper;
+    private final MemoryMapper memoryMapper;
 
     public ConversationService(ConversationMapper conversationMapper,
                                CharacterMapper characterMapper,
-                               ActivityService activityService) {
+                               ActivityService activityService,
+                               MessageMapper messageMapper,
+                               MemoryMapper memoryMapper) {
         this.conversationMapper = conversationMapper;
         this.characterMapper = characterMapper;
         this.activityService = activityService;
+        this.messageMapper = messageMapper;
+        this.memoryMapper = memoryMapper;
     }
 
     @Transactional(readOnly = true)
@@ -59,12 +69,19 @@ public class ConversationService {
         return ConversationView.from(requireOwned(userId, conversationId));
     }
 
+    /** 删除会话时级联逻辑删除该会话的消息与记忆，避免残留孤立数据。 */
     @Transactional
     public void delete(Long userId, Long conversationId) {
         Conversation conversation = requireOwned(userId, conversationId);
+        int messages = messageMapper.delete(Wrappers.<Message>lambdaQuery()
+                .eq(Message::getUserId, userId)
+                .eq(Message::getConversationId, conversationId));
+        int memories = memoryMapper.delete(Wrappers.<Memory>lambdaQuery()
+                .eq(Memory::getUserId, userId)
+                .eq(Memory::getConversationId, conversationId));
         conversationMapper.deleteById(conversation.getId());
         activityService.record(userId, "conversation.deleted", "USER", "core",
-                conversationId, null, null, Map.of());
+                conversationId, null, null, Map.of("messages", messages, "memories", memories));
     }
 
     /** 归属校验：查不到或不属于当前用户都返回 404，避免泄露资源存在性。 */

@@ -10,6 +10,8 @@ import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.dto.MessageView;
 import com.shenyouchu.core.message.mapper.MessageMapper;
 import com.shenyouchu.core.persona.PersonaService;
+import com.shenyouchu.core.relationship.RelationshipService;
+import com.shenyouchu.core.relationship.dto.CharacterStateView;
 import com.shenyouchu.core.turn.dto.TurnResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,19 +30,22 @@ public class TurnService {
     private final ReplyGenerator replyGenerator;
     private final ActivityService activityService;
     private final MemoryService memoryService;
+    private final RelationshipService relationshipService;
 
     public TurnService(ConversationMapper conversationMapper,
                        MessageMapper messageMapper,
                        PersonaService personaService,
                        ReplyGenerator replyGenerator,
                        ActivityService activityService,
-                       MemoryService memoryService) {
+                       MemoryService memoryService,
+                       RelationshipService relationshipService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.personaService = personaService;
         this.replyGenerator = replyGenerator;
         this.activityService = activityService;
         this.memoryService = memoryService;
+        this.relationshipService = relationshipService;
     }
 
     @Transactional
@@ -68,6 +73,10 @@ public class TurnService {
 
         conversation.setLastMessageAt(Instant.now());
         conversationMapper.updateById(conversation);
+
+        CharacterStateView state = relationshipService.applyTurn(userId, conversation.getCharacterId(), text);
+        activityService.record(userId, "relationship.updated", "SYSTEM", "core", conversationId, turnId, null,
+                Map.of("mood", state.mood(), "intimacy", state.intimacy()));
 
         return new TurnResponse(turnId, MessageView.from(userMessage), MessageView.from(assistantMessage));
     }
