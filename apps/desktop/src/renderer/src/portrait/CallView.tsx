@@ -549,13 +549,6 @@ export default function CallView({
         </button>
       </header>
 
-      <div className="call__warning" role="note">
-        <span className="call__warning-dot" aria-hidden="true">
-          !
-        </span>
-        <span>AI 生成内容，不要用于医疗、法律、金融等可能影响健康或安全的决策。</span>
-      </div>
-
       <main className="call__center">
         <div className={orbClass} data-avatar-source={avatarSource}>
           {avatarSource === 'loading' ? (

@@ -646,3 +646,11 @@ DEMO VERIFICATION PASSED: all 4 steps
 
 验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
 未验证：实际窗口视觉；损坏图片回退为手动验收项。
+
+## Round 33：移除通话页 AI 警告条（2026-10-28）
+
+- 按用户要求删除通话页顶部「AI 生成内容，不要用于医疗、法律、金融等可能影响健康或安全的决策」警告条及对应样式；
+- 页脚「内容由 AI 生成」保留（与参考截图一致），如也要去掉可再调整；
+- 未改其他逻辑。
+
+验证：`tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
