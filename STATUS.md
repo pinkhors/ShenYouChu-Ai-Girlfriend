@@ -679,5 +679,16 @@ DEMO VERIFICATION PASSED: all 4 steps
 - 前端加载失败时禁用整张模型卡片，避免用空表单覆盖 ENV 配置；ENV 空 Key 拦截只在“启用”时生效；温度输入不再把空值存成 0；
 - 新增后端单测：`EffectiveLlmConfigTest`、`LlmHttpClientTest`、`UserLlmSettingsServiceTest`（Mockito；沙箱内 surefire 无法 fork，仅保证 testCompile 通过）。
 
-验证：后端 `mvn -o -Dmaven.repo.local=.mvn-repo -DskipTests package` BUILD SUCCESS；前端 `tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed。
-未验证：真实模型端到端、真实 MySQL 上的 V3 迁移、后端测试执行（沙箱限制）、设置页视觉。
+验证：后端 `mvn -o -Dmaven.repo.local=.mvn-repo -DskipTests package` BUILD SUCCESS；前端 `tsc --noEmit` exit 0；`npm test` 58 passed / 0 failed；**V3 已在本机 MySQL 实际执行并通过 Flyway 记录**。
+未验证：真实模型端到端、后端测试执行（沙箱限制）、设置页视觉。
+
+## Round 36：V3 迁移实际执行与交付检查（2026-10-28）
+
+- 用新构建的应用以 `--spring.main.web-application-type=none` 启动一次，让 Flyway 执行 `V3__user_llm_settings.sql`；
+- 执行结果：`Successfully applied 1 migration ... now at version v3`，`flyway_schema_history` 新增 version=3 / success=1；
+- 已 `SHOW CREATE TABLE user_llm_settings` 核验表结构（user_id 主键 + FK、enabled/base_url/model/api_key/max_tokens/temperature/timeout_seconds、created_at/updated_at）；
+- 代码提交：`aacb19c feat(settings): per-user LLM configuration with runtime routing`（33 files，含后端/前端/迁移/测试/文档）；
+- 运行中的 48080 后端是迁移前启动的旧进程，需重启后新接口才生效；
+- GitHub 推送被沙箱拒绝：`cannot create standard input pipe for remote-https: Permission denied`，需本机执行 `git push origin main`。
+
+本轮 SQL 变更：新增表 `user_llm_settings`（无删表/改列/数据迁移）。Flyway 已记录，后续启动不会重复执行。
