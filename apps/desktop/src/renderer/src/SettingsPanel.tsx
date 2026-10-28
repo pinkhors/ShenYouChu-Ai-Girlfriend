@@ -54,11 +54,11 @@ export default function SettingsPanel({
         <section className="setting-card">
           <h2 className="setting-card__title">形象</h2>
           <p className="setting-card__desc">
-            形象参数保存在本机，不随账号同步；恢复默认后需要重新捏脸。
+            形象与立绘只保存在本机，不随账号同步；清除后会回到默认矢量形象。
           </p>
           <button className="btn btn--ghost" type="button" onClick={onResetAvatar}>
             <Icon name="sparkles" size={16} />
-            恢复默认形象
+            清除形象（立绘 + 捏脸）
           </button>
         </section>
 

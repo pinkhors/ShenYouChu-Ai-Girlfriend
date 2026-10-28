@@ -18,13 +18,17 @@ import {
 } from './api/client'
 import * as tokenStore from './auth/tokenStore'
 import ActivityPanel from './ActivityPanel'
-import AvatarEditor from './avatar/AvatarEditor'
 import GirlfriendAvatar from './avatar/GirlfriendAvatar'
 import { DEFAULT_AVATAR, type AvatarConfig } from './avatar/avatarConfig'
 import { clearAvatar, getAvatar, saveAvatar } from './avatar/avatarStorage'
 import ChatView from './ChatView'
 import ConversationSidebar from './ConversationSidebar'
+import LookPage from './LookPage'
 import MemoryPanel from './MemoryPanel'
+import AvatarPortrait from './portrait/AvatarPortrait'
+import CallView from './portrait/CallView'
+import type { PortraitExpression, PortraitSet } from './portrait/expression'
+import { clearPortraits, loadPortraits, removePortrait, savePortrait } from './portrait/portraitStorage'
 import SettingsPanel from './SettingsPanel'
 import Icon, { type IconName } from './ui/Icon'
 
@@ -78,11 +82,19 @@ function describeError(error: unknown, fallbackMessage: string): string {
   return fallbackMessage
 }
 
-function EmptyChat({ avatar, onCreate }: { readonly avatar: AvatarConfig; readonly onCreate: () => void }) {
+function EmptyChat({
+  avatar,
+  portraits,
+  onCreate
+}: {
+  readonly avatar: AvatarConfig
+  readonly portraits: PortraitSet | null
+  readonly onCreate: () => void
+}) {
   return (
     <section className="empty-chat">
       <div className="empty-chat__portrait">
-        <GirlfriendAvatar config={avatar} />
+        <AvatarPortrait config={avatar} portraits={portraits} />
       </div>
       <h1 className="empty-chat__title">沈幼楚在这里</h1>
       <p className="muted">从左侧选择一个会话，或者开始一次新的聊天。</p>
@@ -110,6 +122,8 @@ export default function App() {
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [characterState, setCharacterState] = useState<CharacterState | null>(null)
   const [avatar, setAvatar] = useState<AvatarConfig>(DEFAULT_AVATAR)
+  const [portraits, setPortraits] = useState<PortraitSet | null>(null)
+  const [callOpen, setCallOpen] = useState(false)
   const [accountError, setAccountError] = useState<string | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
@@ -120,6 +134,8 @@ export default function App() {
       setConversations([])
       setActiveConversation(null)
       setCharacterState(null)
+      setPortraits(null)
+      setCallOpen(false)
       setSection('chats')
       setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '登录状态已失效，请重新登录' })
     })
@@ -158,6 +174,34 @@ export default function App() {
     }
     setAvatar(getAvatar(user.id))
   }, [user])
+
+  /* 立绘：登录后从 IndexedDB 读取，按用户隔离 */
+  useEffect(() => {
+    if (user === null) {
+      setPortraits(null)
+      return
+    }
+    let cancelled = false
+    void loadPortraits(user.id)
+      .then((loaded) => {
+        if (!cancelled) {
+          setPortraits(loaded)
+        }
+      })
+      .catch(() => {
+        /* 读取失败按没有立绘处理，界面回退矢量形象 */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  /* 没有进行中的会话时不保留通话页 */
+  useEffect(() => {
+    if (activeConversation === null) {
+      setCallOpen(false)
+    }
+  }, [activeConversation])
 
   /* 启动时校验本地令牌：失败即视为未登录，不做静默降级 */
   useEffect(() => {
@@ -292,6 +336,8 @@ export default function App() {
       setConversations([])
       setActiveConversation(null)
       setCharacterState(null)
+      setPortraits(null)
+      setCallOpen(false)
       setSection('chats')
       setAuth(INITIAL_AUTH_STATE)
     }
@@ -314,12 +360,19 @@ export default function App() {
     }
     if (currentUserId !== null) {
       clearAvatar(currentUserId)
+      try {
+        await clearPortraits(currentUserId)
+      } catch {
+        /* 本机立绘清理失败不阻塞账号删除 */
+      }
     }
     tokenStore.clear()
     setUser(null)
     setConversations([])
     setCharacterState(null)
     setActiveConversation(null)
+    setPortraits(null)
+    setCallOpen(false)
     setSection('chats')
     setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '账号已删除，感谢你的陪伴' })
   }
@@ -371,8 +424,62 @@ export default function App() {
   const handleResetAvatar = (): void => {
     if (user !== null) {
       clearAvatar(user.id)
+      void clearPortraits(user.id).catch(() => {
+        /* 清理失败不影响界面回到默认 */
+      })
     }
     setAvatar(DEFAULT_AVATAR)
+    setPortraits(null)
+  }
+
+  const handleImportPortrait = async (
+    slot: PortraitExpression,
+    dataUrl: string
+  ): Promise<boolean> => {
+    if (user === null) {
+      return false
+    }
+    const previous = portraits
+    setPortraits({ ...(previous ?? {}), [slot]: dataUrl })
+    try {
+      await savePortrait(user.id, slot, dataUrl)
+      return true
+    } catch {
+      setPortraits(previous)
+      return false
+    }
+  }
+
+  const handleRemovePortrait = async (slot: PortraitExpression): Promise<boolean> => {
+    if (user === null) {
+      return false
+    }
+    const previous = portraits
+    const next: PortraitSet = { ...(previous ?? {}) }
+    delete next[slot]
+    setPortraits(Object.keys(next).length === 0 ? null : next)
+    try {
+      await removePortrait(user.id, slot)
+      return true
+    } catch {
+      setPortraits(previous)
+      return false
+    }
+  }
+
+  const handleClearPortraits = async (): Promise<boolean> => {
+    if (user === null) {
+      return false
+    }
+    const previous = portraits
+    setPortraits(null)
+    try {
+      await clearPortraits(user.id)
+      return true
+    } catch {
+      setPortraits(previous)
+      return false
+    }
   }
 
   if (isBootstrapping) {
@@ -492,19 +599,20 @@ export default function App() {
   }
 
   return (
-    <div className="workspace">
-      <nav className="rail" aria-label="主导航">
-        <button
-          className="rail__me"
-          type="button"
-          title={`${user.username} · 打开设置`}
-          aria-label="打开设置"
-          onClick={() => {
-            setSection('settings')
-          }}
-        >
-          <GirlfriendAvatar config={avatar} variant="avatar" />
-        </button>
+    <>
+      <div className="workspace">
+        <nav className="rail" aria-label="主导航">
+          <button
+            className="rail__me"
+            type="button"
+            title={`${user.username} · 打开设置`}
+            aria-label="打开设置"
+            onClick={() => {
+              setSection('settings')
+            }}
+          >
+            <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
+          </button>
 
         <div className="rail__nav">
           {NAV_ITEMS.map((item) => (
@@ -546,6 +654,7 @@ export default function App() {
           error={conversationError}
           deletingId={deletingConversationId}
           avatar={avatar}
+          portraits={portraits}
           onSelect={setActiveConversation}
           onCreate={handleCreateConversation}
           onDelete={(conversation) => {
@@ -564,19 +673,31 @@ export default function App() {
               key={activeConversation.id}
               conversation={activeConversation}
               avatar={avatar}
+              portraits={portraits}
               characterState={characterState}
               userName={user.username}
+              onCall={() => {
+                setCallOpen(true)
+              }}
             />
           ) : (
             <EmptyChat
               avatar={avatar}
+              portraits={portraits}
               onCreate={() => {
                 void handleCreateConversation('')
               }}
             />
           )
         ) : section === 'look' ? (
-          <AvatarEditor config={avatar} onSave={handleSaveAvatar} />
+          <LookPage
+            config={avatar}
+            onSave={handleSaveAvatar}
+            portraits={portraits}
+            onImportPortrait={handleImportPortrait}
+            onRemovePortrait={handleRemovePortrait}
+            onClearPortraits={handleClearPortraits}
+          />
         ) : section === 'memories' ? (
           <MemoryPanel />
         ) : section === 'activity' ? (
@@ -597,5 +718,17 @@ export default function App() {
         )}
       </main>
     </div>
+
+      {callOpen && activeConversation !== null && (
+        <CallView
+          portraits={portraits}
+          config={avatar}
+          characterState={characterState}
+          onClose={() => {
+            setCallOpen(false)
+          }}
+        />
+      )}
+    </>
   )
 }

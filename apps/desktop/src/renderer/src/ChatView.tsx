@@ -11,15 +11,18 @@ import {
   type Message
 } from './api/client'
 import type { AvatarConfig } from './avatar/avatarConfig'
-import GirlfriendAvatar from './avatar/GirlfriendAvatar'
+import AvatarPortrait from './portrait/AvatarPortrait'
+import type { PortraitSet } from './portrait/expression'
 import Icon from './ui/Icon'
 import { formatClock, formatTime } from './ui/time'
 
 interface ChatViewProps {
   readonly conversation: Conversation
   readonly avatar: AvatarConfig
+  readonly portraits: PortraitSet | null
   readonly characterState: CharacterState | null
   readonly userName: string
+  readonly onCall: () => void
 }
 
 const SUGGESTIONS = ['今天有点累，想和你说说话', '你还记得我喜欢什么吗？', '给我讲个睡前故事吧']
@@ -39,7 +42,14 @@ function clampPercent(value: number): number {
 }
 
 /** 会话详情：历史消息分页、SSE 流式回复、停止生成与语音占位入口。 */
-export default function ChatView({ conversation, avatar, characterState, userName }: ChatViewProps) {
+export default function ChatView({
+  conversation,
+  avatar,
+  portraits,
+  characterState,
+  userName,
+  onCall
+}: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [streamingText, setStreamingText] = useState('')
@@ -201,7 +211,7 @@ export default function ChatView({ conversation, avatar, characterState, userNam
     <section className="chat" aria-label={`与沈幼楚的会话：${conversation.title ?? '未命名会话'}`}>
       <header className="chat__header">
         <span className="chat__avatar">
-          <GirlfriendAvatar config={avatar} variant="avatar" />
+          <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
         </span>
         <div className="chat__identity">
           <h1 className="chat__name">沈幼楚</h1>
@@ -209,6 +219,12 @@ export default function ChatView({ conversation, avatar, characterState, userNam
             在线 · {conversation.title ?? '未命名会话'}
             {conversation.status !== 'active' && ` · ${conversation.status}`}
           </p>
+        </div>
+        <div className="chat__actions">
+          <button className="chat__call" type="button" onClick={onCall}>
+            <Icon name="phone" size={17} />
+            通话
+          </button>
         </div>
         <div className="chat__chips">
           {characterState !== null && (
@@ -257,7 +273,7 @@ export default function ChatView({ conversation, avatar, characterState, userNam
         ) : isEmpty ? (
           <div className="chat__empty">
             <span className="chat__empty-avatar">
-              <GirlfriendAvatar config={avatar} variant="avatar" />
+              <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
             </span>
             <p className="chat__empty-title">还没有消息</p>
             <p className="muted">说点什么开始吧，她会记住你在意的事。</p>
@@ -288,7 +304,7 @@ export default function ChatView({ conversation, avatar, characterState, userNam
                     </span>
                   ) : (
                     <span className="bubble-avatar">
-                      <GirlfriendAvatar config={avatar} variant="avatar" />
+                      <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
                     </span>
                   )}
                   <div className={isUser ? 'bubble bubble--user' : 'bubble bubble--assistant'}>
@@ -303,7 +319,7 @@ export default function ChatView({ conversation, avatar, characterState, userNam
             {streamingText !== '' && (
               <li className="message message--assistant">
                 <span className="bubble-avatar">
-                  <GirlfriendAvatar config={avatar} variant="avatar" />
+                  <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
                 </span>
                 <div className="bubble bubble--assistant">
                   <p className="bubble__text">

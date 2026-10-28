@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import type { Conversation } from './api/client'
 import type { AvatarConfig } from './avatar/avatarConfig'
-import GirlfriendAvatar from './avatar/GirlfriendAvatar'
+import AvatarPortrait from './portrait/AvatarPortrait'
+import type { PortraitSet } from './portrait/expression'
 import Icon from './ui/Icon'
 import { formatListTime } from './ui/time'
 
@@ -12,6 +13,7 @@ interface ConversationSidebarProps {
   readonly error: string | null
   readonly deletingId: string | null
   readonly avatar: AvatarConfig
+  readonly portraits: PortraitSet | null
   readonly onSelect: (conversation: Conversation) => void
   readonly onCreate: (title: string) => Promise<boolean>
   readonly onDelete: (conversation: Conversation) => void
@@ -26,6 +28,7 @@ export default function ConversationSidebar({
   error,
   deletingId,
   avatar,
+  portraits,
   onSelect,
   onCreate,
   onDelete,
@@ -139,7 +142,7 @@ export default function ConversationSidebar({
                   onClick={() => onSelect(conversation)}
                 >
                   <span className="conversation__avatar">
-                    <GirlfriendAvatar config={avatar} variant="avatar" />
+                    <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
                   </span>
                   <span className="conversation__text">
                     <span className="conversation__title">{conversation.title ?? '未命名会话'}</span>
