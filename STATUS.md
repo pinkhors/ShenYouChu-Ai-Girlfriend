@@ -261,3 +261,23 @@ mvn -B spring-boot:run -pl services/core
 - TTS：`POST {VOICE_TTS_URL}` JSON `{text, emotion}` → `{audioBase64, format}`
 
 下一轮：把桌面端「停止生成」纳入验收脚本可自动化验证；M0 桌面端本机完整安装指引；准备里程碑收尾。
+
+## Round 12 进展（2026-10-28）
+
+已实现并验证：
+
+- 验收清单：[docs/04-acceptance-checklist.md](docs/04-acceptance-checklist.md)，对照 PRD 逐条标注
+  已验收 / 已实现 / 待实现，并给出复现命令；
+- `verify-m1.ps1` 新增取消校验：未知轮次取消 404、他人取消 404；真实环境全部通过；
+- 桌面端 README 增加「本机联调步骤与故障排查」（Electron 镜像、乱码、SSE 缓冲、token 失效等）；
+- 文档索引加入验收清单。
+
+真实环境验收（本轮再次执行，全部通过）：
+
+```text
+health UP；消息 2；记忆 preference；活动事件 5；
+bob 读 alice 消息 404；bob 删 alice 记忆 404；
+SSE turn.completed；取消未知轮次 404；bob 取消 alice 轮次 404；匿名 401
+```
+
+下一轮：里程碑收尾核对（README 状态、STATUS 汇总），并尝试在本机条件下验证桌面端构建的替代方案。

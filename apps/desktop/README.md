@@ -92,3 +92,29 @@ apps/desktop/
 - TODO(M3 安全存储)：`tokenStore` 迁移到 `safeStorage` + 受限 IPC；
 - 生产构建后按需补严格 CSP（`index.html` 现无 CSP meta，因为开发期 React Refresh 需要内联脚本）；
 - 契约文档 3.2 的 cursor 分页与后端现有裸数组实现不一致，需后端或文档择一收敛。
+
+## 本机联调步骤与故障排查
+
+```cmd
+:: 1) 后端必须在运行（默认 48080）
+curl http://127.0.0.1:48080/actuator/health
+
+:: 2) 安装依赖（Electron 二进制较大，国内建议先设镜像）
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm install
+npm run typecheck
+npm run build
+npm run dev
+```
+
+常见问题：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `npm install` 在 electron 处 `ECONNRESET` | Electron 二进制默认从 GitHub 下载 | 设置 `ELECTRON_MIRROR` 后重装 |
+| `electron-vite` / `tsc` 不是内部或外部命令 | 依赖未装完（安装中断） | 删除 `apps/desktop/node_modules` 后重新 `npm install` |
+| 界面提示登录状态失效 | 后端 401（token 过期或后端重启） | 重新登录；后端重启不会清库，用户仍在 |
+| 消息不流式、直接整段出现 | 用了 `/turns` 而非 `/turns/stream`，或代理缓冲 SSE | 确认前端走 `streamTurn`，代理需关闭缓冲 |
+| 中文回复乱码 | 终端编码非 UTF-8 | 后端已强制 UTF-8；终端执行 `chcp 65001` |
+
+说明：桌面端只依赖 `/api/v1` 接口，不直接访问数据库；后端地址可用 `VITE_API_BASE_URL` 覆盖。

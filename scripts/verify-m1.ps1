@@ -98,6 +98,24 @@ try {
 }
 
 Write-Host ""
+Write-Host "==> cancel unknown turn (expect 404)"
+try {
+    Invoke-Api -Method Post -Path "/api/v1/conversations/$($conv.id)/turns/not-a-real-turn/cancel" -Token $alice.token | Out-Null
+    Write-Host "FAIL: unknown turn cancel succeeded"
+} catch {
+    Write-Host "OK: unknown turn got HTTP $(Status-Code $_)"
+}
+
+Write-Host ""
+Write-Host "==> bob cancels alice turn (expect 404)"
+try {
+    Invoke-Api -Method Post -Path "/api/v1/conversations/$($conv.id)/turns/$($turn.turnId)/cancel" -Token $bob.token | Out-Null
+    Write-Host "FAIL: bob cancelled alice turn"
+} catch {
+    Write-Host "OK: bob got HTTP $(Status-Code $_)"
+}
+
+Write-Host ""
 Write-Host "==> anonymous request (expect 401)"
 try {
     Invoke-Api -Method Get -Path "/api/v1/memories" | Out-Null
