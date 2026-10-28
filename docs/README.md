@@ -9,6 +9,8 @@
 | [03 开发规范](./03-development-standards.md) | 目录与命名、风格、分支提交、评审、测试、发布 | 所有贡献者 |
 | [数据与接口契约](./contracts/data-and-interface-contracts.md) | 实体字段、REST/WS 接口、视觉信号、存储隔离、删除矩阵 | 服务端、客户端、测试 |
 | [04 验收清单](./04-acceptance-checklist.md) | 对照 PRD 的逐条验收状态与复现步骤 | 产品、测试、开发 |
+| [05 真实模型接入手册](./05-voice-and-model-integration.md) | LLM/ASR/TTS 接入协议、示例包装服务、延迟测量与排查 | 开发、运维 |
+| [06 行为边界测试集](./06-boundary-test-set.md) | 24 条敏感请求用例与期望行为，供接入真实模型后抽检 | 产品、测试 |
 | [CONTEXT.md](../CONTEXT.md) | 项目术语表 | 所有人 |
 | [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界、ADR-0003 MyBatis-Plus 持久化、ADR-0004 本地对象存储、ADR-0005 雪花主键） | 开发、评审 |
 

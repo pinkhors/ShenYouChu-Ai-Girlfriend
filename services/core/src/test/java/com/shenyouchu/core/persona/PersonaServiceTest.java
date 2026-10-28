@@ -41,6 +41,7 @@ class PersonaServiceTest {
 
         String prompt = service.systemPrompt(1L);
         assertThat(prompt).contains("沈幼楚", "23", "温柔", "口语化", "插画师");
+        assertThat(prompt).contains("行为边界", "医疗", "银行卡", "心理援助", "色情");
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

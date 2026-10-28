@@ -57,6 +57,7 @@ GET  /activity-events                  活动记录（可按类型筛选）
 - [开发规范](./docs/03-development-standards.md)
 - [数据与接口契约](./docs/contracts/data-and-interface-contracts.md)
 - [验收清单](./docs/04-acceptance-checklist.md)
+- [真实模型接入手册](./docs/05-voice-and-model-integration.md)
 - [架构决策记录（ADR）](./docs/adr/0001-frontend-react.md)（另见 [ADR-0002 运营检索边界](./docs/adr/0002-operator-search-audit.md)、[ADR-0003 MyBatis-Plus 持久化](./docs/adr/0003-mybatis-plus-persistence.md)、[ADR-0004 本地对象存储](./docs/adr/0004-local-object-storage-minio-legacy.md)、[ADR-0005 雪花 ID](./docs/adr/0005-snowflake-ids.md)）
 - [协作规则（AGENTS.md）](./AGENTS.md)
 - [术语表](./CONTEXT.md)
@@ -82,15 +83,16 @@ docker-compose.yaml         # 本地基础设施（默认 MySQL/Redis，full pro
 services/core/              # Spring Boot 核心服务
 apps/desktop/               # Electron + React + TypeScript 桌面端
 docs/                       # PRD、技术路线、开发规范、契约、ADR
-scripts/                    # 镜像拉取与 M0 验证脚本
+scripts/                    # 镜像拉取、验收与一键 demo 脚本
 ```
 
 ## 状态
 
-M0 进行中：
+M0–M2 已完成真实环境验收：
 
-- 核心服务已在本地 MySQL 上完成真实联调：健康检查、注册/登录、会话归属隔离（跨用户 404）、重复注册 409、匿名 401 全部通过，验证脚本见 `scripts/verify-m0.ps1`；
-- 基础设施 Compose 支持默认（MySQL/Redis）与 `full`（Milvus + legacy MinIO）两种 profile；
-- 桌面端骨架正在搭建，完成后可登录并管理会话。
+- 后端：认证与多用户隔离、会话与消息、SSE 流式对话、记忆、活动事件、关系状态、取消轮次、账号删除级联（MySQL + Redis）全部通过 `scripts/demo.ps1` 一键验收；
+- 基础设施：Compose 支持默认（MySQL/Redis）与 `full`（Milvus + legacy MinIO）两种 profile；
+- 桌面端：登录/会话/流式消息/记忆/活动/关系状态/停止生成/删除账号均已实现并通过 `tsc --noEmit`；
+- 待本机验证：Electron 二进制安装与窗口联调（需在 `apps/desktop` 执行完整 `npm install`）。
 
 未决问题见各文档的「待确认项」，均给出默认建议，不阻塞开发。

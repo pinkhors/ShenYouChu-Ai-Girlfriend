@@ -386,3 +386,27 @@ DEMO VERIFICATION PASSED: all 4 steps
   并禁止用 PowerShell 默认编码整篇重写文档。
 
 下一轮：M2 真实模型接入手册（FunASR/CosyVoice 包装服务协议 + 延迟测量步骤）。
+
+## Round 19 进展（2026-10-28）
+
+已实现并验证：
+
+- 行为边界（FR-2.4）写入系统提示词：`PersonaService.boundaries()` 覆盖专业建议转介、隐私索取拒绝、
+  不诱导情感依赖、违规内容拒绝、极端情绪引导专业援助；`PersonaServiceTest` 增加边界关键词断言；
+- 新增 [docs/05-voice-and-model-integration.md](docs/05-voice-and-model-integration.md)：
+  LLM/ASR/TTS 接入协议、Python 包装服务示例、延迟测量口径（用户说完 → 客户端可听首音）、
+  派生存储清理状态、故障排查表；
+- 新增 [docs/06-boundary-test-set.md](docs/06-boundary-test-set.md)：24 条敏感请求用例与期望行为，
+  供接入真实模型后抽检；
+- README 状态更新为 M0–M2 已验收，并补文档索引。
+
+真实验收（`scripts/demo.ps1` 四步全部通过，后端启用 Redis 清理）：
+
+```text
+M0 / M1 / M2 / 账号删除  PASSED
+DEMO VERIFICATION PASSED: all 4 steps
+```
+
+纯逻辑测试 7 个类通过；`mvn package` BUILD SUCCESS。
+
+下一轮：可选实现对象存储/Milvus 清理端口；或补 M1 消息分页与 `Idempotency-Key`（契约已定义）。
