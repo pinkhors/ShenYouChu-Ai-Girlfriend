@@ -162,3 +162,15 @@ mvn -B spring-boot:run -pl services/core
 1. 在桌面端接记忆列表与活动记录视图（对应 `/memories`、`/activity-events`）；
 2. 本机补 Electron 二进制（`npm install` 完整版）后 `npm run build:desktop` / `dev:desktop` 联调；
 3. 后端 `verify-m1.ps1` 实跑。
+
+## Round 6 进展（2026-10-28）
+
+已实现并验证：
+
+- 前端 API：`listMemories`、`deleteMemory`、`listActivityEvents(type, limit)` 及对应类型；
+- 新增 [MemoryPanel.tsx](apps/desktop/src/renderer/src/MemoryPanel.tsx)：记忆列表、逐条删除（含二次确认）、空态与错误态；
+- 新增 [ActivityPanel.tsx](apps/desktop/src/renderer/src/ActivityPanel.tsx)：只读活动时间线，支持按事件类型筛选；
+- 顶栏新增「会话 / 记忆 / 活动」切换，App 按视图渲染对应面板；
+- 验证：`node_modules/.bin/tsc --noEmit` **exit 0**。
+
+下一轮：M1 收尾（README/STATUS 对齐、验收脚本实跑指引），随后进入 M2 语音对话（ASR/TTS 适配器与可取消轮次）。

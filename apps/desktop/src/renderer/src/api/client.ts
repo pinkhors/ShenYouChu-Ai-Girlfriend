@@ -333,3 +333,40 @@ export async function streamTurn(
     }
   }
 }
+
+export interface MemoryView {
+  readonly id: string
+  readonly memoryType: string
+  readonly content: string
+  readonly status: string
+  readonly createdAt: string
+  readonly conversationId: string | null
+}
+
+export interface ActivityEventView {
+  readonly id: string
+  readonly eventType: string
+  readonly actor: string
+  readonly source: string
+  readonly occurredAt: string
+  readonly conversationId: string | null
+  readonly turnId: string | null
+  readonly payload: string | null
+}
+
+export function listMemories(): Promise<MemoryView[]> {
+  return request<MemoryView[]>('/memories')
+}
+
+export function deleteMemory(id: string): Promise<void> {
+  return request<void>(`/memories/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function listActivityEvents(type?: string, limit = 50): Promise<ActivityEventView[]> {
+  const query = new URLSearchParams()
+  if (type !== undefined && type !== '') {
+    query.set('type', type)
+  }
+  query.set('limit', String(limit))
+  return request<ActivityEventView[]>(`/activity-events?${query.toString()}`)
+}

@@ -15,6 +15,8 @@ import {
 } from './api/client'
 import * as tokenStore from './auth/tokenStore'
 import ConversationPanel from './ConversationPanel'
+import MemoryPanel from './MemoryPanel'
+import ActivityPanel from './ActivityPanel'
 
 /**
  * 应用根组件：未登录显示登录/注册卡片，已登录显示会话管理界面。
@@ -84,6 +86,7 @@ export default function App() {
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
   const [newConversationTitle, setNewConversationTitle] = useState('')
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
+  const [view, setView] = useState<'conversations' | 'memories' | 'activity'>('conversations')
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
   useEffect(() => {
@@ -369,6 +372,35 @@ export default function App() {
           <span className="badge">{user.role}</span>
         </div>
         <div className="topbar__actions">
+          <div className="identity-nav">
+            <button
+              className={view === 'conversations' ? 'button button--primary' : 'button button--ghost'}
+              type="button"
+              onClick={() => {
+                setView('conversations')
+              }}
+            >
+              会话
+            </button>
+            <button
+              className={view === 'memories' ? 'button button--primary' : 'button button--ghost'}
+              type="button"
+              onClick={() => {
+                setView('memories')
+              }}
+            >
+              记忆
+            </button>
+            <button
+              className={view === 'activity' ? 'button button--primary' : 'button button--ghost'}
+              type="button"
+              onClick={() => {
+                setView('activity')
+              }}
+            >
+              活动
+            </button>
+          </div>
           <span className="topbar__endpoint" title={API_BASE}>
             后端：{API_BASE}
           </span>
@@ -385,6 +417,11 @@ export default function App() {
       </header>
 
       <main className="workspace">
+        {view === 'memories' ? (
+          <MemoryPanel />
+        ) : view === 'activity' ? (
+          <ActivityPanel />
+        ) : (
         <section className="panel">
           <div className="panel__header">
             <h2 className="panel__title">我的会话</h2>
@@ -477,6 +514,7 @@ export default function App() {
             - TODO(M3 Live2D)：沈幼楚立绘渲染层，命令式挂载以避免整树重渲染。
           */}
         </section>
+        )}
       </main>
     </div>
   )

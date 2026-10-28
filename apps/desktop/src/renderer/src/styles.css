@@ -386,3 +386,43 @@ body {
 .composer .field__input {
   flex: 1;
 }
+
+/* M1：记忆与活动记录 */
+.identity-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.memory-list,
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-item,
+.activity-item {
+  border: 1px solid #2c3644;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.memory-item__content,
+.activity-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memory-item__meta,
+.activity-item__meta {
+  font-size: 12px;
+  color: #9aa7b6;
+}

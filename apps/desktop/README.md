@@ -1,6 +1,6 @@
 # 沈幼楚桌面客户端（apps/desktop）
 
-Electron + React + TypeScript 桌面骨架。当前为 **M0：登录 + 会话增删查**，语音、视觉、Live2D 仅保留挂载点与 TODO 注释，未实现。
+Electron + React + TypeScript 桌面客户端。当前为 **M1：登录、会话增删查、会话内消息与 SSE 流式回复、记忆列表、活动记录**，语音、视觉、Live2D 仅保留挂载点与 TODO 注释。
 
 ## 前置条件
 
