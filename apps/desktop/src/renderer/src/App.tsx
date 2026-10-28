@@ -14,6 +14,7 @@ import {
   type UserView
 } from './api/client'
 import * as tokenStore from './auth/tokenStore'
+import ConversationPanel from './ConversationPanel'
 
 /**
  * 应用根组件：未登录显示登录/注册卡片，已登录显示会话管理界面。
@@ -82,6 +83,7 @@ export default function App() {
   const [isCreatingConversation, setIsCreatingConversation] = useState(false)
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
   const [newConversationTitle, setNewConversationTitle] = useState('')
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
   useEffect(() => {
@@ -348,6 +350,17 @@ export default function App() {
     )
   }
 
+  if (activeConversation !== null) {
+    return (
+      <ConversationPanel
+        conversation={activeConversation}
+        onBack={() => {
+          setActiveConversation(null)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -433,6 +446,15 @@ export default function App() {
                       {conversation.status}
                     </span>
                   </div>
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => {
+                      setActiveConversation(conversation)
+                    }}
+                  >
+                    进入
+                  </button>
                   <button
                     className="button button--danger"
                     type="button"

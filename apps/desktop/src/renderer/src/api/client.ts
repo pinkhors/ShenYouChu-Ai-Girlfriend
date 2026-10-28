@@ -202,3 +202,134 @@ export function createConversation(input: CreateConversationInput = {}): Promise
 export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
+
+export interface Message {
+  readonly id: string
+  readonly role: 'user' | 'assistant' | 'system'
+  readonly content: string
+  readonly createdAt: string
+}
+
+export interface TurnResponse {
+  readonly turnId: string
+  readonly userMessage: Message
+  readonly assistantMessage: Message
+}
+
+export function listMessages(conversationId: string): Promise<Message[]> {
+  return request<Message[]>(`/conversations/${encodeURIComponent(conversationId)}/messages`)
+}
+
+export function sendTurn(conversationId: string, message: string): Promise<TurnResponse> {
+  return request<TurnResponse>(`/conversations/${encodeURIComponent(conversationId)}/turns`, {
+    method: 'POST',
+    body: { message }
+  })
+}
+
+export interface TurnStreamHandlers {
+  readonly onStarted?: (turnId: string) => void
+  readonly onDelta?: (delta: string) => void
+  readonly onCompleted?: (turnId: string, messageId: string) => void
+}
+
+function parseFrame(frame: string): { event: string; data: string } | null {
+  let event = 'message'
+  const dataLines: string[] = []
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trim())
+    }
+  }
+  if (dataLines.length === 0) {
+    return null
+  }
+  return { event, data: dataLines.join('\n') }
+}
+
+function readPayloadField(data: string, key: string): string | undefined {
+  try {
+    const payload: unknown = JSON.parse(data)
+    if (isRecord(payload)) {
+      return readString(payload, key)
+    }
+  } catch {
+    /* 忽略无法解析的帧，保持流不中断 */
+  }
+  return undefined
+}
+
+/**
+ * SSE 流式轮次：解析后端 turn.started / assistant.text.delta / turn.completed。
+ * 使用 fetch + ReadableStream 而非 EventSource，因为需要 POST 请求体与 Authorization 头。
+ */
+export async function streamTurn(
+  conversationId: string,
+  message: string,
+  handlers: TurnStreamHandlers,
+  signal?: AbortSignal
+): Promise<void> {
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json'
+  }
+  const token = getToken()
+  if (token !== null) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch(
+    `${API_BASE}${API_PREFIX}/conversations/${encodeURIComponent(conversationId)}/turns/stream`,
+    { method: 'POST', headers, body: JSON.stringify({ message }), signal }
+  )
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      onUnauthorized?.()
+    }
+    throw toApiError(response.status, await response.text())
+  }
+  if (response.body === null) {
+    throw new ApiError(0, 'STREAM_UNAVAILABLE', '当前环境不支持流式响应', undefined)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+
+    let separator = buffer.indexOf('\n\n')
+    while (separator >= 0) {
+      const frame = buffer.slice(0, separator)
+      buffer = buffer.slice(separator + 2)
+      const parsed = parseFrame(frame)
+      if (parsed !== null) {
+        if (parsed.event === 'turn.started') {
+          const turnId = readPayloadField(parsed.data, 'turnId')
+          if (turnId !== undefined) {
+            handlers.onStarted?.(turnId)
+          }
+        } else if (parsed.event === 'assistant.text.delta') {
+          const delta = readPayloadField(parsed.data, 'delta')
+          if (delta !== undefined) {
+            handlers.onDelta?.(delta)
+          }
+        } else if (parsed.event === 'turn.completed') {
+          handlers.onCompleted?.(
+            readPayloadField(parsed.data, 'turnId') ?? '',
+            readPayloadField(parsed.data, 'messageId') ?? ''
+          )
+        }
+      }
+      separator = buffer.indexOf('\n\n')
+    }
+  }
+}

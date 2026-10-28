@@ -145,3 +145,20 @@ mvn -B spring-boot:run -pl services/core
 ```
 
 下一轮：桌面端补消息列表与流式显示；`verify-m1.ps1` 实跑（需 MySQL 运行）。
+
+## Round 5 进展（2026-10-28）
+
+已实现并验证：
+
+- 前端 API 客户端扩展：`listMessages`、`sendTurn`，以及 `streamTurn`（fetch + ReadableStream 解析 SSE，事件 `turn.started` / `assistant.text.delta` / `turn.completed`）；
+- 新增会话详情组件 [ConversationPanel.tsx](apps/desktop/src/renderer/src/ConversationPanel.tsx)：历史消息、输入发送、流式回复气泡、错误与加载态；
+- 会话列表新增「进入」入口，App 根据选中会话切换到详情视图；
+- 样式补充消息气泡、流式虚线边框与输入条；
+- 依赖修复：在 `apps/desktop` 内用 `npm install --ignore-scripts --cache .npm-cache` 重建依赖（沙箱禁构建脚本，仅影响 Electron 二进制下载）；
+- 验证：`node_modules/.bin/tsc --noEmit` **exit 0**。
+
+下一轮：
+
+1. 在桌面端接记忆列表与活动记录视图（对应 `/memories`、`/activity-events`）；
+2. 本机补 Electron 二进制（`npm install` 完整版）后 `npm run build:desktop` / `dev:desktop` 联调；
+3. 后端 `verify-m1.ps1` 实跑。
