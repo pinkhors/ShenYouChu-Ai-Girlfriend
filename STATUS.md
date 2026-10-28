@@ -342,3 +342,28 @@ character-state：mood 53、intimacy 2
 
 下一轮：`AccountPurgePort` 的 Redis 会话清理实现（需引入 spring-boot-starter-data-redis），
 以及 README 里程碑状态收尾。
+
+## Round 16 进展（2026-10-28）
+
+已实现并验证：
+
+- Redis 会话清理：引入 `spring-boot-starter-data-redis`，`RedisAccountPurgePort`
+  按契约键约定删除 `sess/turn/rate/media:{userId}:*`，受 `REDIS_ENABLED` 控制；
+- 配置：`spring.data.redis.*`（host/port/password/timeout，默认对齐 Compose 的 46379）；
+- 一键演示脚本 `scripts/demo.ps1`：串联 M0 → M1 → M2 → 账号删除，任一步失败立即中断；
+- 本轮后端以 `REDIS_ENABLED=true` 启动，账号删除流程同时清理 Redis。
+
+真实环境一键演示结果（全部通过）：
+
+```text
+STEP M0：health UP / 注册 / 隔离 404 / 重复注册 409 / 匿名 401         PASSED
+STEP M1：消息 2 / 记忆 preference / 活动事件 6 / SSE completed /
+         取消 404 / 关系状态 mood 53 intimacy 2 / 会话级联删除 0 残留   PASSED
+STEP M2：语音占位识别 / 非法 Base64 400 / 越权 404 / 匿名 401         PASSED
+STEP 账号删除：204 / 旧 token 401 / 删除后登录 401                    PASSED
+DEMO VERIFICATION PASSED: all 4 steps
+```
+
+测试：7 个纯逻辑测试类通过；`mvn package` BUILD SUCCESS。
+
+下一轮：README 里程碑收尾；可选的对象存储/Milvus 清理端口实现。

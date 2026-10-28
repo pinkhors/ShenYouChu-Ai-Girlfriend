@@ -21,6 +21,12 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:46379}
+      password: ${REDIS_PASSWORD:syc_dev_redis}
+      timeout: 3s
 
 mybatis-plus:
   configuration:
@@ -72,6 +78,9 @@ shenyouchu:
     asr-url: ${VOICE_ASR_URL:}
     tts-url: ${VOICE_TTS_URL:}
     timeout-seconds: ${VOICE_TIMEOUT_SECONDS:30}
+  redis:
+    # true 时账号删除会清理 Redis 中的会话/临时键（键约定见契约 7.1）。
+    enabled: ${REDIS_ENABLED:false}
   cors:
     # 桌面端本地开发地址；生产环境改为实际域名
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

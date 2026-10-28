@@ -22,3 +22,4 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-m0.ps1
 ## 鍛藉悕绾﹀畾
 
 - `verify-<閲岀▼纰?.ps1`锛氱鍒扮楠屾敹鑴氭湰锛屽け璐ユ椂杩斿洖闈為浂閫€鍑虹爜锛?- `pull-*`銆乣init-*`銆乣reset-*`锛氱幆澧冨噯澶囩被鑴氭湰锛?- 鏂板鑴氭湰蹇呴』鍦ㄦ湰鏂囦欢鐧昏鐢ㄩ€斾笌鍓嶇疆鏉′欢锛?- 鑴氭湰浜х敓鐨勭紦瀛樸€佹棩蹇椼€佹暟鎹洰褰曚竴寰嬪啓鍏?`.gitignore`锛屼笉寰楁彁浜ゃ€?
+
