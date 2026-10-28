@@ -202,3 +202,27 @@ mvn -B spring-boot:run -pl services/core
 说明：占位链路用 UTF-8 文本 Base64 代替真实音频，仅用于在无麦克风/无模型环境下验证协议与归属校验；真实 ASR/TTS 接入后同一接口不变。
 
 下一轮：真实 ASR/TTS 适配器（FunASR/CosyVoice）与可取消轮次；桌面端录音授权与状态机骨架。
+
+## Round 9 进展（2026-10-28，真实端到端验收）
+
+本轮在真实环境（本机 MySQL 8 + 运行中的后端）完成 M0/M1/M2 验收，并修复了 4 个真实缺陷：
+
+1. **SSE 500**：SseEmitter 完成后的 ASYNC 二次派发没有 SecurityContext，被 Spring Security 拒绝；
+   修复：`SecurityConfig` 放行 `DispatcherType.ASYNC/ERROR`（REQUEST 仍鉴权）；
+2. **SSE 失败无日志**：`GlobalExceptionHandler` 吞异常不记录；已加 `log.error` 并补
+   `NoResourceFoundException → 404`；
+3. **脚本编码**：Windows PowerShell 默认非 UTF-8 发送 JSON 导致中文变问号、记忆不命中；
+   修复：`[Console]::OutputEncoding` + UTF-8 bytes + `charset=utf-8`；
+4. **SSE 脚本**：`curl.exe` 在 Windows 下引号被剥离导致 JSON 非法；改用 `Invoke-WebRequest -UseBasicParsing`。
+   另外响应统一加 `server.servlet.encoding.force=true`，修掉控制台乱码。
+
+验收结果（真实执行）：
+
+- `verify-m0.ps1`：health UP、注册、会话隔离 404、重复注册 409、匿名 401，会话 ID 为雪花 ID 字符串；
+- `verify-m1.ps1`：轮次/消息（2 条）、记忆（preference）、活动事件（5 条）、越权 404、
+  **SSE `turn.completed` 通过**、匿名 401；
+- `verify-m2.ps1`：语音占位链路（识别 `我喜欢看电影`、confidence 1.0、ttsFormat none）、
+  非法 Base64 400、越权 404、匿名 401；
+- 纯单元测试 5 个类全部通过；`mvn package` BUILD SUCCESS。
+
+下一轮：桌面端本机完整安装 Electron 后联调；M2 真实 ASR/TTS 适配器；可取消轮次。

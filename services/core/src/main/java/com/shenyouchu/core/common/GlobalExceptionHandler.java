@@ -1,18 +1,23 @@
 package com.shenyouchu.core.common;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 import java.util.UUID;
 
-/** 统一错误响应：{ code, message, requestId }，不返回堆栈与内部细节。 */
+/** 统一错误响应：{ code, message, requestId }，不返回堆栈与内部细节，但必须记录未知异常。 */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> handleApiException(ApiException ex, HttpServletRequest request) {
@@ -37,8 +42,16 @@ public class GlobalExceptionHandler {
                 .body(body("VALIDATION_FAILED", ex.getName() + " 取值不合法", request));
     }
 
+    /** 未匹配到任何路由（例如缺少必需的路径参数）：404，而不是 500。 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex,
+                                                                HttpServletRequest request) {
+        return ResponseEntity.status(404).body(body("NOT_FOUND", "资源不存在", request));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return ResponseEntity.internalServerError().body(body("INTERNAL_ERROR", "服务暂时不可用", request));
     }
 

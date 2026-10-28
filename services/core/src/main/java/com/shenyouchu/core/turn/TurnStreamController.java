@@ -5,6 +5,8 @@ import com.shenyouchu.core.security.CurrentUser;
 import com.shenyouchu.core.turn.dto.TurnRequest;
 import com.shenyouchu.core.turn.dto.TurnResponse;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 public class TurnStreamController {
 
     private static final int CHUNK_SIZE = 8;
+    private static final Logger log = LoggerFactory.getLogger(TurnStreamController.class);
 
     private final TurnService turnService;
     private final ObjectMapper objectMapper;
@@ -57,7 +60,15 @@ public class TurnStreamController {
                         "messageId", response.assistantMessage().id()));
                 emitter.complete();
             } catch (Exception ex) {
-                emitter.completeWithError(ex);
+                log.error("SSE turn failed: conversationId={}", conversationId, ex);
+                try {
+                    send(emitter, "turn.failed", Map.of(
+                            "code", "INTERNAL_ERROR",
+                            "message", "本轮回复失败，请重试"));
+                } catch (Exception ignored) {
+                    /* 客户端可能已断开，忽略二次发送失败 */
+                }
+                emitter.complete();
             }
         });
         return emitter;

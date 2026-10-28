@@ -2,6 +2,7 @@ package com.shenyouchu.core.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shenyouchu.core.security.TokenAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -40,6 +41,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        /* SSE 结束时 Spring 会做 ASYNC 二次派发，此时 SecurityContext 不随线程传播；
+                           初始 REQUEST 派发仍然鉴权，因此放行 ASYNC/ERROR 是安全的。 */
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                         .anyRequest().authenticated())

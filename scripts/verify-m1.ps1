@@ -3,6 +3,8 @@
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $suffix = Get-Date -Format "HHmmss"
 $password = "password123"
 
@@ -16,8 +18,9 @@ function Invoke-Api {
     if ($Token) { $headers["Authorization"] = "Bearer $Token" }
     $params = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $headers }
     if ($Body -ne $null) {
-        $params["ContentType"] = "application/json"
-        $params["Body"] = ($Body | ConvertTo-Json -Compress)
+        $json = $Body | ConvertTo-Json -Compress
+        $params["ContentType"] = "application/json; charset=utf-8"
+        $params["Body"] = [System.Text.Encoding]::UTF8.GetBytes($json)
     }
     return Invoke-RestMethod @params
 }
@@ -77,10 +80,22 @@ try {
 
 Write-Host ""
 Write-Host "==> SSE stream (expect turn.completed)"
-$sse = & curl.exe -s -N -X POST "$BaseUrl/api/v1/conversations/$($conv.id)/turns/stream" `
-    -H "Authorization: Bearer $($alice.token)" -H "Content-Type: application/json" `
-    -d "{""message"":""hello there""}" 2>$null
-if ($sse -match "turn.completed") { Write-Host "OK: SSE completed" } else { Write-Host "SSE output: $sse" }
+try {
+    $sseBody = @{ message = "hello there" } | ConvertTo-Json -Compress
+    $sseResponse = Invoke-WebRequest -Method Post `
+        -Uri "$BaseUrl/api/v1/conversations/$($conv.id)/turns/stream" `
+        -Headers @{ Authorization = "Bearer $($alice.token)" } `
+        -ContentType "application/json; charset=utf-8" `
+        -Body ([System.Text.Encoding]::UTF8.GetBytes($sseBody)) `
+        -UseBasicParsing
+    if ($sseResponse.Content -match "turn.completed") {
+        Write-Host "OK: SSE completed"
+    } else {
+        Write-Host "SSE output: $($sseResponse.Content)"
+    }
+} catch {
+    Write-Host "SSE error: $($_.Exception.Message)"
+}
 
 Write-Host ""
 Write-Host "==> anonymous request (expect 401)"
@@ -93,3 +108,4 @@ try {
 
 Write-Host ""
 Write-Host "M1 verification finished."
+

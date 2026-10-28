@@ -3,6 +3,8 @@
 param([string]$BaseUrl = "http://127.0.0.1:48080")
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $suffix = Get-Date -Format "HHmmss"
 $password = "password123"
 
@@ -16,8 +18,9 @@ function Invoke-Api {
     if ($Token) { $headers["Authorization"] = "Bearer $Token" }
     $params = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $headers }
     if ($Body -ne $null) {
-        $params["ContentType"] = "application/json"
-        $params["Body"] = ($Body | ConvertTo-Json -Compress)
+        $json = $Body | ConvertTo-Json -Compress
+        $params["ContentType"] = "application/json; charset=utf-8"
+        $params["Body"] = [System.Text.Encoding]::UTF8.GetBytes($json)
     }
     return Invoke-RestMethod @params
 }
@@ -80,3 +83,4 @@ try {
 
 Write-Host ""
 Write-Host "M2 verification finished."
+

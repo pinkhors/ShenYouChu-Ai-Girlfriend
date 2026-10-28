@@ -1,6 +1,10 @@
 server:
   port: ${SERVER_PORT:48080}
   shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
 
 spring:
   application:
