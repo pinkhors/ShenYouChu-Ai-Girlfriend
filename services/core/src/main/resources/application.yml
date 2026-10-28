@@ -51,6 +51,16 @@ shenyouchu:
   auth:
     # 会话有效期，默认 30 天
     session-ttl: ${AUTH_SESSION_TTL:30d}
+  llm:
+    # OpenAI 兼容接口（DashScope compatible-mode、vLLM、Ollama 均可）。
+    # enabled=false 时使用确定性占位回复，保证离线可演示。
+    enabled: ${LLM_ENABLED:false}
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:qwen3.7-plus}
+    timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
+    max-tokens: ${LLM_MAX_TOKENS:256}
+    temperature: ${LLM_TEMPERATURE:0.8}
   cors:
     # 桌面端本地开发地址；生产环境改为实际域名
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

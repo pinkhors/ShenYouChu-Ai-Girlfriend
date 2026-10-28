@@ -124,3 +124,24 @@ pnpm --filter shenyouchu-desktop dev
 1. 扩展 `verify-m1.ps1` 到可本地实际执行（需要 MySQL 运行）；
 2. 接入 LLM 适配器（DashScope 或本地 OpenAI 兼容端点），保持 `ReplyGenerator` 接口；
 3. 桌面端接入消息列表与流式显示。
+
+## Round 4 进展（2026-10-28）
+
+已实现并验证：
+
+- LLM 适配器 `HttpLlmReplyGenerator`：OpenAI 兼容 `/chat/completions`，支持 base-url / api-key / model / timeout / max-tokens / temperature；
+- 开关与回退：`shenyouchu.llm.enabled=false`（默认）使用 `SimplePersonaReplyGenerator`；开启后调用模型，异常/超时/空回复自动回退，保证对话链路可用；
+- 配置：`application.yml` 新增 `shenyouchu.llm.*`，`.env.example` 新增 `LLM_*` 变量（含 DashScope compatible-mode 示例）；
+- 验证：`mvn -DskipTests package` **BUILD SUCCESS**；`HttpLlmReplyGeneratorTest` 等 4 个纯逻辑测试全部通过。
+
+接入方式（本机启用真实模型）：
+
+```cmd
+set LLM_ENABLED=true
+set LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+set LLM_API_KEY=sk-xxx
+set LLM_MODEL=qwen3.7-plus
+mvn -B spring-boot:run -pl services/core
+```
+
+下一轮：桌面端补消息列表与流式显示；`verify-m1.ps1` 实跑（需 MySQL 运行）。
