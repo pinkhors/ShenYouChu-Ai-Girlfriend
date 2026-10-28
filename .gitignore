@@ -48,3 +48,8 @@ recordings/
 
 # npm 本地校验缓存
 .npm-cache/
+
+# pnpm/corepack 本地缓存（前端已改为 apps/desktop 独立包）
+.corepack/
+.pnpm-store/
+pnpm-lock.yaml
