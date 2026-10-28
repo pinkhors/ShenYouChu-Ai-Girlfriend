@@ -545,3 +545,15 @@ DEMO VERIFICATION PASSED: all 4 steps
 - `src/main/index.ts`：加载 `ELECTRON_RENDERER_URL` 时把 `://localhost` 归一化为 `://127.0.0.1`。
 
 验证：`tsc --noEmit` exit 0。（本机需重启 `npm run dev` 生效）
+
+## 修复：开发服务器加载失败时的可诊断回退（2026-10-28）
+
+现象：Electron 窗口显示浏览器 ERR_CONNECTION_REFUSED/无法访问此网站，而不是应用界面。
+
+修复：
+
+- `src/main/index.ts` 在开发模式下对 `loadURL` 增加 `.catch` 回退：
+  加载失败时在窗口内显示「开发服务器加载失败」与目标地址，避免系统错误页或静默白屏；
+- 同时把终端错误打印到 stdout，便于排查（例如 dev server 未就绪、端口被占用、代理拦截）。
+
+验证：`tsc --noEmit` exit 0。

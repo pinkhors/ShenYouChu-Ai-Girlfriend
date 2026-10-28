@@ -48,8 +48,21 @@ function createMainWindow(): BrowserWindow {
     /**
      * 统一走 IPv4：Windows 下 localhost 可能解析为 ::1，
      * 而开发服务器绑定在 127.0.0.1，直接加载 localhost 会 ERR_CONNECTION_REFUSED。
+     * 同时把网络/证书错误映射为窗口内错误提示，避免静默白屏或系统错误页。
      */
-    void mainWindow.loadURL(rendererDevServerUrl.replace('://localhost', '://127.0.0.1'))
+    const normalizedUrl = rendererDevServerUrl.replace('://localhost', '://127.0.0.1')
+    void mainWindow.loadURL(normalizedUrl).catch((error: unknown) => {
+      console.error('[desktop] 开发服务器加载失败：', error)
+      void mainWindow.loadURL(
+        'data:text/html;charset=utf-8,' +
+          encodeURIComponent(
+            '<h2 style="font-family:sans-serif;color:#e8e8ea;background:#12131a;padding:24px">' +
+              '开发服务器加载失败</h2>' +
+              '<p style="font-family:sans-serif;color:#c8c9ce;background:#12131a;padding:0 24px 24px">' +
+              `目标地址：${normalizedUrl}</p>`
+          )
+      )
+    })
   } else {
     /* 生产/预览：使用 app.getAppPath() 而非 __dirname，因为主进程产物是 ESM */
     void mainWindow.loadFile(join(app.getAppPath(), 'out', 'renderer', 'index.html'))
