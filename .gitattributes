@@ -1,0 +1,13 @@
+# 统一换行：仓库内使用 LF，避免 Windows 检出把整文件重写成 CRLF 造成大 diff。
+* text=auto eol=lf
+
+# Windows 脚本保持 CRLF，兼容记事本与旧工具。
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制文件不做换行转换。
+*.jar binary
+*.png binary
+*.jpg binary
+*.docx binary
