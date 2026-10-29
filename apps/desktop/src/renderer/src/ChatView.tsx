@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode
+} from 'react'
 import {
   ApiError,
   cancelTurn,
@@ -10,13 +19,17 @@ import {
 } from './api/client'
 import type { CharacterView } from './character/characterTypes'
 import { prependOlderMessages } from './chat/messagePages'
-import { dropHandoffMessage, handoffPendingMessages, takePendingMessages } from './chat/pendingHandoff'
+import {
+  addPendingMessage,
+  dropPendingMessage,
+  getPendingMessages,
+  reconcilePendingMessages,
+  subscribePendingMessages
+} from './chat/pendingStore'
 import {
   createPendingUserMessage,
   newestMessageId,
-  reconcilePending,
-  toDisplayMessage,
-  type PendingUserMessage
+  toDisplayMessage
 } from './chat/pendingMessages'
 import AvatarPortrait from './portrait/AvatarPortrait'
 import { resolvePortrait, type PortraitSet } from './portrait/expression'
@@ -68,7 +81,6 @@ export default function ChatView({
   reloadToken
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
-  const [pending, setPending] = useState<PendingUserMessage[]>([])
   const [draft, setDraft] = useState('')
   const [streamingText, setStreamingText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -81,18 +93,19 @@ export default function ChatView({
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const mountedRef = useRef(true)
-  const isSendingRef = useRef(false)
-  const pendingRef = useRef<PendingUserMessage[]>(pending)
   const onTurnSettledRef = useRef(onTurnSettled)
   const stickToBottomRef = useRef(true)
+
+  /*
+   * 占位消息存放在模块级 store 里（按会话 id），不随 ChatView 卸载丢失：
+   * 切到角色/记忆页再回来、反复切换，刚发出的消息都还在，直到服务端落库后对齐移除。
+   */
+  const pendingSnapshot = useCallback(() => getPendingMessages(conversation.id), [conversation.id])
+  const pending = useSyncExternalStore(subscribePendingMessages, pendingSnapshot)
 
   useEffect(() => {
     onTurnSettledRef.current = onTurnSettled
   }, [onTurnSettled])
-
-  useEffect(() => {
-    pendingRef.current = pending
-  }, [pending])
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -100,7 +113,7 @@ export default function ChatView({
       const page = await listMessages(conversation.id)
       setMessages(page.items)
       /* 服务端已落库的消息会顶替本地占位，避免重复展示 */
-      setPending((previous) => reconcilePending(previous, page.items))
+      reconcilePendingMessages(conversation.id, page.items)
       setNextCursor(page.nextCursor)
       setError(null)
     } catch (loadError) {
@@ -115,24 +128,15 @@ export default function ChatView({
   }, [load, reloadToken])
 
   /*
-   * 切走会话时界面会卸载，但本轮 SSE 不中断：服务端仍在生成并最终落库，
-   * 结束时用 onTurnSettled 通知应用层刷新。卸载前把尚未落库的占位消息交接出去，
-   * 下次进入该会话时先展示，避免“最近的几条消息看不见”。
+   * 切换主导航会卸载本组件，但本轮 SSE 不中断：服务端仍在生成并最终落库，
+   * 结束时用 onTurnSettled 通知应用层刷新会话列表与当前会话。
    */
   useEffect(() => {
-    /* 上一次切走时还没等到回复：先把占位消息补回来（取走后即清空，重复执行是幂等的） */
-    const handedOff = takePendingMessages(conversation.id)
-    if (handedOff.length > 0) {
-      setPending((previous) => [...handedOff, ...previous])
-    }
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      if (isSendingRef.current) {
-        handoffPendingMessages(conversation.id, pendingRef.current)
-      }
     }
-  }, [conversation.id])
+  }, [])
 
   useEffect(() => {
     if (!stickToBottomRef.current) {
@@ -153,7 +157,7 @@ export default function ChatView({
       /* 更早的消息接在顶部，保持时间顺序；此时不要把视图拉回底部 */
       stickToBottomRef.current = false
       setMessages((previous) => prependOlderMessages(previous, page.items))
-      setPending((previous) => reconcilePending(previous, page.items))
+      reconcilePendingMessages(conversation.id, page.items)
       setNextCursor(page.nextCursor)
     } catch (loadError) {
       setError(toMessage(loadError))
@@ -173,9 +177,8 @@ export default function ChatView({
     setError(null)
     setStreamingText('')
     setIsSending(true)
-    isSendingRef.current = true
-    /* 先本地占位：不等服务端落库，用户消息立刻出现在会话里 */
-    setPending((previous) => [...previous, pendingMessage])
+    /* 先本地占位：不等服务端落库，用户消息立刻出现在会话里（存放在跨视图的 store 里） */
+    addPendingMessage(conversation.id, pendingMessage)
 
     /**
      * 本轮结束后的收尾：仍在本会话就回源对齐；
@@ -220,14 +223,12 @@ export default function ChatView({
         setError(toMessage(sendError))
         if (!started) {
           /* 尚未落库：撤回占位消息并把文本放回输入框，便于重发 */
-          setPending((previous) => previous.filter((item) => item.localId !== pendingMessage.localId))
-          dropHandoffMessage(conversation.id, pendingMessage.localId)
+          dropPendingMessage(conversation.id, pendingMessage.localId)
           setDraft((current) => (current === '' ? text : current))
         }
         settle()
       }
     } finally {
-      isSendingRef.current = false
       setIsSending(false)
       setStreamingText('')
       activeTurnIdRef.current = null
@@ -354,7 +355,7 @@ export default function ChatView({
           </button>
         )}
 
-        {isLoading && messages.length === 0 ? (
+        {isLoading && messages.length === 0 && pending.length === 0 ? (
           <p className="muted chat__placeholder">正在加载消息…</p>
         ) : isEmpty ? (
           <div className="chat__empty">

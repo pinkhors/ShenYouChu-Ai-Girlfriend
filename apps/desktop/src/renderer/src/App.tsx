@@ -32,6 +32,7 @@ import {
 } from './character/characterTypes'
 import { useCharacters } from './character/useCharacters'
 import { usePortraitAssets } from './character/usePortraitAssets'
+import { clearPendingMessages } from './chat/pendingStore'
 import ChatView from './ChatView'
 import ConversationSidebar from './ConversationSidebar'
 import MemoryPanel from './MemoryPanel'
@@ -206,6 +207,7 @@ export default function App() {
   useEffect(() => {
     setOnUnauthorized(() => {
       tokenStore.clear()
+      clearPendingMessages()
       setUser(null)
       setConversations([])
       setActiveConversation(null)
@@ -285,6 +287,7 @@ export default function App() {
           return
         }
         tokenStore.clear()
+        clearPendingMessages()
         setUser(null)
         setAuth({
           ...INITIAL_AUTH_STATE,
@@ -417,6 +420,7 @@ export default function App() {
       console.warn('[desktop] 退出登录请求失败：', describeError(error, '未知错误'))
     } finally {
       tokenStore.clear()
+      clearPendingMessages()
       setUser(null)
       setConversations([])
       setActiveConversation(null)
@@ -455,6 +459,7 @@ export default function App() {
       )
     }
     tokenStore.clear()
+    clearPendingMessages()
     setUser(null)
     setConversations([])
     setCharacterState(null)

@@ -9,7 +9,7 @@
     "dev": "node scripts/dev.mjs dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node scripts/prepare-cjs.mjs && node --test --test-isolation=none out-tsc/tests/sse.test.js out-tsc/tests/encoding.test.js out-tsc/tests/turnStream.test.js out-tsc/tests/pendingMessages.test.js out-tsc/tests/pendingHandoff.test.js out-tsc/tests/messagePages.test.js out-tsc/tests/tokenStore.test.js out-tsc/tests/avatarConfig.test.js out-tsc/tests/avatarSource.test.js out-tsc/tests/portraitExpression.test.js out-tsc/tests/generationConfig.test.js out-tsc/tests/characterTypes.test.js out-tsc/tests/imagegen.test.js out-tsc/tests/imagegen.integration.test.js out-tsc/tests/tts.test.js out-tsc/tests/asr.test.js out-tsc/tests/voiceConfig.test.js"
+    "test": "tsc -p tsconfig.test.json && node scripts/prepare-cjs.mjs && node --test --test-isolation=none out-tsc/tests/sse.test.js out-tsc/tests/encoding.test.js out-tsc/tests/turnStream.test.js out-tsc/tests/pendingMessages.test.js out-tsc/tests/pendingStore.test.js out-tsc/tests/messagePages.test.js out-tsc/tests/tokenStore.test.js out-tsc/tests/avatarConfig.test.js out-tsc/tests/avatarSource.test.js out-tsc/tests/portraitExpression.test.js out-tsc/tests/generationConfig.test.js out-tsc/tests/characterTypes.test.js out-tsc/tests/imagegen.test.js out-tsc/tests/imagegen.integration.test.js out-tsc/tests/tts.test.js out-tsc/tests/asr.test.js out-tsc/tests/voiceConfig.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",
