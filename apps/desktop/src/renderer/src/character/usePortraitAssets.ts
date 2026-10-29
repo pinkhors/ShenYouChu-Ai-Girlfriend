@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PortraitExpression, PortraitSet } from '../portrait/expression'
 import {
   clearHeroImage,
@@ -9,10 +9,19 @@ import {
   saveHeroImage,
   savePortrait as savePortraitRecord
 } from '../portrait/portraitStorage'
+import {
+  getCharacterAvatarSource,
+  type CharacterAvatarSource
+} from './avatarSourcePreferences'
 
 export interface PortraitAssets {
+  /** 本机实际导入/生成的完整立绘，供立绘管理面板使用。 */
   readonly portraits: PortraitSet | null
+  /** 按角色“形象来源”偏好过滤后的立绘，供聊天/通话/预览显示。 */
+  readonly displayPortraits: PortraitSet | null
   readonly heroImage: string | null
+  readonly displayHeroImage: string | null
+  readonly source: CharacterAvatarSource
   readonly loading: boolean
   readonly setHero: (dataUrl: string) => Promise<boolean>
   readonly clearHero: () => Promise<boolean>
@@ -24,15 +33,30 @@ export interface PortraitAssets {
 /**
  * 某个角色的本机立绘与聊天主视觉。
  * 角色切换时重新加载；官方角色会尝试迁移旧版本按 userId 存的数据。
+ * sourceVersion 变化时重新读取该角色的形象来源偏好。
  */
 export function usePortraitAssets(
   userId: string | null,
   characterId: string | null,
-  officialCharacterId?: string
+  officialCharacterId?: string,
+  sourceVersion = 0
 ): PortraitAssets {
   const [portraits, setPortraits] = useState<PortraitSet | null>(null)
   const [heroImage, setHeroImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const source = useMemo<CharacterAvatarSource>(() => {
+    if (userId === null || characterId === null) {
+      return 'auto'
+    }
+    return getCharacterAvatarSource(userId, characterId)
+  }, [userId, characterId, sourceVersion])
+
+  const displayPortraits =
+    source === 'vector'
+      ? null
+      : portraits ?? (heroImage !== null ? { neutral: heroImage } : null)
+  const displayHeroImage = source === 'vector' ? null : heroImage
 
   useEffect(() => {
     if (userId === null || characterId === null) {
@@ -162,7 +186,10 @@ export function usePortraitAssets(
 
   return {
     portraits,
+    displayPortraits,
     heroImage,
+    displayHeroImage,
+    source,
     loading,
     setHero,
     clearHero,

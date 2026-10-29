@@ -168,6 +168,24 @@ export async function loadPortraits(
   }
 }
 
+/**
+ * 只读取一张预览图（基础表情优先），供角色卡/切换器/会话列表使用。
+ * 避免把每个角色的整组立绘都常驻在列表组件里。
+ */
+export async function loadPortraitPreview(
+  userId: string,
+  characterId: string,
+  officialCharacterId?: string
+): Promise<string | null> {
+  const portraits = await loadPortraits(userId, characterId, officialCharacterId)
+  const portrait = portraits?.neutral ?? (portraits === null ? null : Object.values(portraits)[0] ?? null)
+  if (portrait !== null) {
+    return portrait
+  }
+  /* 只导入了聊天主视觉时也用它做列表头像，避免角色卡仍显示矢量形象。 */
+  return loadHeroImage(userId, characterId, officialCharacterId)
+}
+
 export async function savePortrait(
   userId: string,
   characterId: string,

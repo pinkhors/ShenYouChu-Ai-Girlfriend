@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { isSameAvatar } from '../avatar/avatarConfig'
 import { buildCharacterBasePrompt } from '../portrait/generationConfig'
+import type { PortraitExpression } from '../portrait/expression'
 import PortraitStudio from '../portrait/PortraitStudio'
 import Icon from '../ui/Icon'
 import AppearancePanel from './AppearancePanel'
+import AvatarSourcePicker from './AvatarSourcePicker'
+import {
+  getCharacterAvatarSource,
+  setCharacterAvatarSource,
+  type CharacterAvatarSource
+} from './avatarSourcePreferences'
 import CharacterPreviewCard from './CharacterPreviewCard'
 import FamilyPanel from './FamilyPanel'
 import IdentityPanel from './IdentityPanel'
@@ -36,6 +43,7 @@ export interface CharacterEditorProps {
   ) => Promise<CharacterView | null>
   readonly onSaveOfficialAvatar: (config: CharacterDraft['avatarConfig']) => void
   readonly onCopyOfficial: (avatarConfig: CharacterDraft['avatarConfig']) => void
+  readonly onVisualChange?: () => void
   readonly onUse: (id: string) => void
 }
 
@@ -74,6 +82,7 @@ export default function CharacterEditor({
   onUpdate,
   onSaveOfficialAvatar,
   onCopyOfficial,
+  onVisualChange,
   onUse
 }: CharacterEditorProps) {
   const [draft, setDraft] = useState<CharacterDraft>(initialDraft)
@@ -86,6 +95,10 @@ export default function CharacterEditor({
   const [leaveOpen, setLeaveOpen] = useState(false)
   const [leaveBusy, setLeaveBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [avatarSource, setAvatarSource] = useState<CharacterAvatarSource>(() =>
+    character === null ? 'auto' : getCharacterAvatarSource(userId, character.id)
+  )
+  const [avatarSourceVersion, setAvatarSourceVersion] = useState(0)
   const toastTimer = useRef<number | null>(null)
   const titleRef = useRef<HTMLHeadingElement | null>(null)
 
@@ -94,8 +107,39 @@ export default function CharacterEditor({
   const portraitAssets = usePortraitAssets(
     userId,
     character?.id ?? null,
-    isOfficial ? character?.id : undefined
+    isOfficial ? character?.id : undefined,
+    avatarSourceVersion
   )
+
+  const changeAvatarSource = (source: CharacterAvatarSource): void => {
+    setAvatarSource(source)
+    setAvatarSourceVersion((previous) => previous + 1)
+    if (character !== null) {
+      setCharacterAvatarSource(userId, character.id, source)
+    }
+    onVisualChange?.()
+  }
+
+  const afterVisualChange = async (operation: Promise<boolean>): Promise<boolean> => {
+    const ok = await operation
+    if (ok) {
+      onVisualChange?.()
+    }
+    return ok
+  }
+
+  const importPortrait = (slot: PortraitExpression, dataUrl: string): Promise<boolean> =>
+    afterVisualChange(portraitAssets.importPortrait(slot, dataUrl))
+
+  const removePortrait = (slot: PortraitExpression): Promise<boolean> =>
+    afterVisualChange(portraitAssets.removePortrait(slot))
+
+  const setHero = (dataUrl: string): Promise<boolean> =>
+    afterVisualChange(portraitAssets.setHero(dataUrl))
+
+  const clearHero = (): Promise<boolean> => afterVisualChange(portraitAssets.clearHero())
+
+  const clearPortraits = (): Promise<boolean> => afterVisualChange(portraitAssets.clearAll())
 
   const otherNames = useMemo(
     () =>
@@ -340,6 +384,14 @@ export default function CharacterEditor({
               : '捏脸参数随角色保存；立绘只保存在本机，按用户与角色隔离。'}
         </p>
 
+        {character !== null && (
+          <AvatarSourcePicker
+            source={avatarSource}
+            hasPortrait={portraitAssets.portraits !== null || portraitAssets.heroImage !== null}
+            onChange={changeAvatarSource}
+          />
+        )}
+
         {appearanceTab === 'face' ? (
           <AppearancePanel
             value={draft.avatarConfig}
@@ -369,11 +421,11 @@ export default function CharacterEditor({
                 draft.age,
                 draft.avatarConfig
               )}
-              onSetHero={portraitAssets.setHero}
-              onClearHero={portraitAssets.clearHero}
-              onImport={portraitAssets.importPortrait}
-              onRemove={portraitAssets.removePortrait}
-              onClear={portraitAssets.clearAll}
+              onSetHero={setHero}
+              onClearHero={clearHero}
+              onImport={importPortrait}
+              onRemove={removePortrait}
+              onClear={clearPortraits}
             />
           </div>
         )}
@@ -416,15 +468,25 @@ export default function CharacterEditor({
         <aside className="editor2__preview" aria-label="实时预览">
           <CharacterPreviewCard
             draft={draft}
-            portraits={portraitAssets.portraits}
+            portraits={
+              portraitAssets.displayPortraits ??
+              (portraitAssets.displayHeroImage !== null
+                ? { neutral: portraitAssets.displayHeroImage }
+                : null)
+            }
             size="large"
           />
           <p className="editor2__preview-hint">
-            {portraitAssets.portraits !== null
-              ? '预览使用已导入的立绘'
-              : isCreate
-                ? '保存后可导入立绘，现在先用矢量形象'
-                : '预览使用矢量形象；导入立绘后优先展示立绘'}
+            {avatarSource === 'vector' &&
+            (portraitAssets.portraits !== null || portraitAssets.heroImage !== null)
+              ? '已选择捏脸：聊天和列表都使用矢量形象'
+              : portraitAssets.portraits !== null
+                ? '预览使用已导入的立绘'
+                : portraitAssets.displayHeroImage !== null
+                  ? '预览使用聊天主视觉'
+                  : isCreate
+                    ? '保存后可导入立绘，现在先用矢量形象'
+                    : '预览使用矢量形象；导入立绘后可在“形象来源”切换'}
           </p>
         </aside>
 

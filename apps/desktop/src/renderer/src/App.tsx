@@ -30,6 +30,7 @@ import {
   type CharacterView
 } from './character/characterTypes'
 import { useCharacters } from './character/useCharacters'
+import { useCharacterPreviews } from './character/useCharacterPreviews'
 import { usePortraitAssets } from './character/usePortraitAssets'
 import { resetTurnSessions, subscribeSettledTurns } from './chat/turnSessions'
 import ChatView from './ChatView'
@@ -167,6 +168,8 @@ export default function App() {
   const [accountError, setAccountError] = useState<string | null>(null)
   const [characterPageError, setCharacterPageError] = useState<string | null>(null)
   const [editor, setEditor] = useState<EditorState | null>(null)
+  /* 形象来源偏好变化后，驱动列表预览和聊天预览重新解析 */
+  const [avatarSourceVersion, setAvatarSourceVersion] = useState(0)
   /* 后台轮次结束时读取“用户当前停在哪个会话”，用 ref 避免闭包里拿到旧值 */
   const activeConversationIdRef = useRef<string | null>(null)
 
@@ -203,10 +206,18 @@ export default function App() {
   const displayCharacter =
     section === 'chats' && activeConversation !== null ? conversationCharacter : activeCharacter
 
+  const characterPreviews = useCharacterPreviews(
+    user?.id ?? null,
+    displayCharacters,
+    characters.official?.id,
+    avatarSourceVersion
+  )
+
   const portraitAssets = usePortraitAssets(
     user?.id ?? null,
     displayCharacter?.id ?? null,
-    characters.official?.id
+    characters.official?.id,
+    avatarSourceVersion
   )
 
   /* 401 统一处置：清空本地登录态并回到登录界面，避免每个调用点各写一遍 */
@@ -801,6 +812,7 @@ export default function App() {
         <nav className="rail" aria-label="主导航">
           <CharacterSwitcher
             characters={displayCharacters}
+            previews={characterPreviews}
             activeId={characters.activeId}
             onSelect={(id) => {
               void handleSwitchCharacter(id)
@@ -851,6 +863,7 @@ export default function App() {
             error={conversationError}
             clearingId={clearingConversationId}
             characters={displayCharacters}
+            previews={characterPreviews}
             activeCharacterId={characters.activeId}
             onSwitchCharacter={(id) => {
               void handleSwitchCharacter(id)
@@ -875,13 +888,14 @@ export default function App() {
                 key={activeConversation.id}
                 conversation={activeConversation}
                 character={characterForChat}
-                portraits={portraitAssets.portraits}
-                heroImage={portraitAssets.heroImage}
+                portraits={portraitAssets.displayPortraits}
+                heroImage={portraitAssets.displayHeroImage}
                 characterState={characterState}
                 userName={user.username}
                 characterSwitcher={
                   <CharacterSwitcher
                     characters={displayCharacters}
+                    previews={characterPreviews}
                     activeId={characters.activeId}
                     onSelect={(id) => {
                       void handleSwitchCharacter(id)
@@ -900,7 +914,7 @@ export default function App() {
             ) : activeCharacter !== null ? (
               <EmptyChat
                 character={activeCharacter}
-                portraits={portraitAssets.portraits}
+                portraits={portraitAssets.displayPortraits}
                 isEntering={isLoadingConversations}
                 onEnter={() => {
                   /* 会话由后端 ensure，这里只切换角色并打开其唯一会话 */
@@ -927,6 +941,9 @@ export default function App() {
                 onCreate={handleCreateCharacter}
                 onUpdate={handleUpdateCharacter}
                 onSaveOfficialAvatar={handleSaveOfficialAvatar}
+                onVisualChange={() => {
+                  setAvatarSourceVersion((previous) => previous + 1)
+                }}
                 onCopyOfficial={(avatarConfig) => {
                   if (characters.official !== null) {
                     void handleDuplicateCharacter(characters.official.id, avatarConfig)
@@ -940,6 +957,7 @@ export default function App() {
             ) : (
               <CharacterHub
                 characters={displayCharacters}
+                previews={characterPreviews}
                 activeId={characters.activeId}
                 isLoading={characters.isLoading}
                 error={characterPageError ?? characters.error}
@@ -992,7 +1010,7 @@ export default function App() {
       {callOpen && activeConversation !== null && characterForChat !== null && (
         <CallView
           conversation={activeConversation}
-          portraits={portraitAssets.portraits}
+          portraits={portraitAssets.displayPortraits}
           portraitsLoading={portraitAssets.loading}
           config={characterForChat.avatarConfig}
           characterName={characterForChat.displayName}

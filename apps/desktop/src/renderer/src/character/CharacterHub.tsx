@@ -10,9 +10,11 @@ import {
   type CharacterView
 } from './characterTypes'
 import { characterTags, cx, displayNameOf } from './characterUiHelpers'
+import type { CharacterPreviewMap } from './useCharacterPreviews'
 
 export interface CharacterHubProps {
   readonly characters: readonly CharacterView[]
+  readonly previews?: CharacterPreviewMap
   readonly activeId: string | null
   readonly isLoading: boolean
   readonly error: string | null
@@ -37,6 +39,7 @@ function tagsOf(character: CharacterView): string[] {
 /** 角色中心：官方角色、我的角色、归档区与模板选择。所有数据与动作都由 props 注入。 */
 export default function CharacterHub({
   characters,
+  previews,
   activeId,
   isLoading,
   error,
@@ -212,7 +215,7 @@ export default function CharacterHub({
             <div className="hub-official__portrait">
               <AvatarPortrait
                 config={official.avatarConfig}
-                portraits={null}
+                portraits={previews?.[official.id] ?? null}
                 name={displayNameOf(official.displayName)}
               />
             </div>
@@ -334,7 +337,7 @@ export default function CharacterHub({
                       <div className="hub-card__portrait">
                         <AvatarPortrait
                           config={character.avatarConfig}
-                          portraits={null}
+                          portraits={previews?.[character.id] ?? null}
                           name={name}
                         />
                       </div>
@@ -451,7 +454,7 @@ export default function CharacterHub({
                           <span className="hub-archived__avatar">
                             <AvatarPortrait
                               config={character.avatarConfig}
-                              portraits={null}
+                              portraits={previews?.[character.id] ?? null}
                               variant="avatar"
                               name={name}
                             />
@@ -571,7 +574,7 @@ export default function CharacterHub({
                   <span className="hub-template__thumb">
                     <AvatarPortrait
                       config={official.avatarConfig}
-                      portraits={null}
+                      portraits={previews?.[official.id] ?? null}
                       variant="avatar"
                       name={displayNameOf(official.displayName)}
                     />

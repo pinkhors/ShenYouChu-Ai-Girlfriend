@@ -5562,3 +5562,80 @@ select {
   opacity: 0.45;
   cursor: default;
 }
+
+/* ---------- 形象来源选择（自动 / 立绘 / 捏脸） ---------- */
+
+.character-avatar-source {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #f0dfe3;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff9fa 0%, #fff 100%);
+}
+
+.character-avatar-source__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.character-avatar-source__title {
+  margin: 0;
+  color: #5a3942;
+  font-size: 14px;
+}
+
+.character-avatar-source__hint {
+  margin: 3px 0 0;
+  color: #a07c84;
+  font-size: 12px;
+}
+
+.character-avatar-source__current {
+  flex: none;
+  max-width: 48%;
+  color: #b06a7a;
+  font-size: 12px;
+  text-align: right;
+}
+
+.character-avatar-source__options {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.character-avatar-source__option {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #eed7dc;
+  border-radius: 9px;
+  background: #fff;
+  color: #7f5d66;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.character-avatar-source__option:hover:not(:disabled) {
+  border-color: #e4b7c0;
+  background: #fff7f8;
+}
+
+.character-avatar-source__option--active {
+  border-color: #e4a8b4;
+  background: #fdf0f3;
+  color: #a24c60;
+  font-weight: 600;
+}
+
+.character-avatar-source__option:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.character-avatar-source__empty {
+  margin: 8px 0 0;
+  color: #a07c84;
+  font-size: 12px;
+}

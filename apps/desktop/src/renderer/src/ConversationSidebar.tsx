@@ -3,6 +3,7 @@ import type { Conversation } from './api/client'
 import { DEFAULT_AVATAR } from './avatar/avatarConfig'
 import type { CharacterView } from './character/characterTypes'
 import CharacterSwitcher from './character/CharacterSwitcher'
+import type { CharacterPreviewMap } from './character/useCharacterPreviews'
 import AvatarPortrait from './portrait/AvatarPortrait'
 import Icon from './ui/Icon'
 import { formatListTime } from './ui/time'
@@ -15,6 +16,7 @@ interface ConversationSidebarProps {
   /** 正在清空聊天记录的会话 id */
   readonly clearingId: string | null
   readonly characters: readonly CharacterView[]
+  readonly previews?: CharacterPreviewMap
   readonly activeCharacterId: string | null
   readonly onSwitchCharacter: (id: string) => void
   readonly onManageCharacters: () => void
@@ -36,6 +38,7 @@ export default function ConversationSidebar({
   error,
   clearingId,
   characters,
+  previews,
   activeCharacterId,
   onSwitchCharacter,
   onManageCharacters,
@@ -84,6 +87,7 @@ export default function ConversationSidebar({
           <h2 className="sidebar__title">聊天</h2>
           <CharacterSwitcher
             characters={characters}
+            previews={previews}
             activeId={activeCharacterId}
             onSelect={onSwitchCharacter}
             onManage={onManageCharacters}
@@ -164,7 +168,7 @@ export default function ConversationSidebar({
                   <span className="conversation__avatar">
                     <AvatarPortrait
                       config={avatarConfig}
-                      portraits={null}
+                      portraits={previews?.[conversation.characterId] ?? null}
                       variant="avatar"
                       name={characterName}
                     />

@@ -2,10 +2,12 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { DEFAULT_AVATAR } from '../avatar/avatarConfig'
 import AvatarPortrait from '../portrait/AvatarPortrait'
 import type { CharacterView } from './characterTypes'
+import type { CharacterPreviewMap } from './useCharacterPreviews'
 import { cx, displayNameOf } from './characterUiHelpers'
 
 export interface CharacterSwitcherProps {
   readonly characters: readonly CharacterView[]
+  readonly previews?: CharacterPreviewMap
   readonly activeId: string | null
   readonly onSelect: (id: string) => void
   readonly onManage: () => void
@@ -19,6 +21,7 @@ export interface CharacterSwitcherProps {
  */
 export default function CharacterSwitcher({
   characters,
+  previews,
   activeId,
   onSelect,
   onManage,
@@ -102,7 +105,7 @@ export default function CharacterSwitcher({
           <span className="switcher__rail-avatar">
             <AvatarPortrait
               config={active?.avatarConfig ?? DEFAULT_AVATAR}
-              portraits={null}
+              portraits={active ? previews?.[active.id] ?? null : null}
               variant="avatar"
               name={activeName}
             />
@@ -184,7 +187,7 @@ export default function CharacterSwitcher({
                   <span className="switcher__item-avatar">
                     <AvatarPortrait
                       config={character.avatarConfig}
-                      portraits={null}
+                      portraits={previews?.[character.id] ?? null}
                       variant="avatar"
                       name={displayNameOf(character.displayName)}
                     />

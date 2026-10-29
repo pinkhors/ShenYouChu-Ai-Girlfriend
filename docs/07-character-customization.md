@@ -139,7 +139,7 @@
 
 ### 3.2 形象
 
-形象分“捏脸”和“立绘”两种来源，二者共用同一份角色卡；立绘优先展示，没有立绘时回退矢量捏脸。
+形象分“捏脸”和“立绘”两种来源，二者共用同一份角色卡。每个角色可在编辑器里选择“自动 / 立绘 / 捏脸”：自动时有立绘用立绘，没有则回退矢量捏脸；选择“捏脸”时即使有立绘也显示矢量形象。角色卡、切换器、会话列表、聊天和通话统一遵循这个选择。
 
 对官方角色，形象调整只在本机生效；对自定义角色，形象参数随角色保存到账号。这样既保留老用户已经调好的沈幼楚，也让新角色的形象可以跨设备。
 
@@ -186,7 +186,7 @@
 - **图形卡**：发型和服饰用简单轮廓图 + 名称 + 一行描述，而不是一排文字按钮。
 - **快捷模板**：温柔 / 清冷 / 元气 / 知性四套现有预设保留，放在最上方；点选只改形象，不改性格，并明确标注“仅应用外观”。
 - **随机与恢复默认**：提供“随机”和“恢复默认”两个快捷动作；随机后可直接再调参数，或恢复默认。
-- **立绘子标签**：形象标签内再分“捏脸 / 立绘”。捏脸用于调参；立绘用于导入/生成该角色的表情差分。立绘存在时，角色卡和聊天默认用立绘。
+- **立绘子标签**：形象标签内再分“捏脸 / 立绘”。捏脸用于调参；立绘用于导入/生成该角色的表情差分。立绘存在时，角色卡、切换器、会话列表、聊天默认用立绘；用户可在“形象来源”中强制切回捏脸。
 
 #### 3.2.4 新增字段与兼容
 
@@ -402,7 +402,7 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 
 角色卡信息层级：
 
-1. 形象（3:4，立绘优先，无立绘用矢量图）
+1. 形象（3:4；按“形象来源”显示立绘、聊天主视觉或矢量图）
 2. 名字 + “当前使用”徽标
 3. 两个性格关键词 + 一个家庭标签（如“都市 · 普通”）
 4. 悬停/聚焦出现操作：使用、编辑、复制、更多（归档/删除）
@@ -482,7 +482,8 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 - 官方角色的形象标签显示“仅本机展示”；自定义角色显示“随账号保存”。
 - 捏脸：按 3.2.3 的分组、色卡、图形卡、三档滑杆呈现。
 - 立绘：复用现有 PortraitStudio，但标题改为“林晚的立绘”，导入/生成都只作用于当前角色。
-- 立绘存在时显示“聊天将使用立绘”；没有立绘时显示“聊天将使用矢量形象”。
+- 形象来源：捏脸面板顶部提供“自动 / 立绘 / 捏脸”三选一；立绘未导入时“立绘”禁用；选择结果按 user+character 存本机，并同步影响角色卡、切换器、会话列表、聊天、通话与编辑器预览。
+- 立绘或聊天主视觉存在时，列表与聊天将使用图片；没有时显示矢量形象。若只导入了聊天主视觉，列表头像也会回退使用主视觉。
 - 生成立绘的提示词由当前角色的身份 + 形象自动拼装，不再使用写死的沈幼楚提示词（P1）。
 
 #### 4.3.3 性格标签
@@ -895,7 +896,7 @@ POST /conversations/{id}/turns/stream
 - [ ] 复制角色带人设和形象，不带本机立绘（除非用户勾选）。
 - [ ] 归档角色从切换器消失，已有会话仍可打开；恢复后重新出现。
 - [ ] 彻底删除角色后，会话/消息/记忆/状态/本机立绘一并清理。
-- [ ] 形象标签支持捏脸与立绘；立绘按角色隔离，切换角色不串图。
+- [ ] 形象标签支持捏脸与立绘；可在自动/立绘/捏脸之间切换，角色卡、切换器、会话列表、聊天和通话同步；立绘按角色隔离，切换角色不串图。
 - [ ] 性格选择能改变系统提示词；同一句话在不同角色下风格可区分（人工抽检）。
 - [ ] 家庭背景选择能体现在提示词与试聊摘要中。
 - [ ] 自定义称呼/自称/补充设定超长或含换行时被拦截。
@@ -976,6 +977,7 @@ POST /conversations/{id}/turns/stream
 | C-10 | 应用名/登录页是否随当前角色变化？ | 不；登录前无法读取角色，品牌继续用沈幼楚 |
 | C-11 | 复制角色是否复制立绘？ | 默认不复制；提供“同时复制本机立绘”勾选 |
 | C-12 | 是否允许用户上传真人照片做立绘？ | 不允许用于冒充真实他人；导入页明确授权提示 |
+| C-13 | 有立绘时能否强制显示捏脸？ | 可以；每个角色在“形象来源”选自动/立绘/捏脸，按 user+character 存本机，所有展示位同步 |
 
 ## 附录 A：关键文案
 
@@ -1019,9 +1021,9 @@ POST /conversations/{id}/turns/stream
 已完成 P0 与 P1 核心项的主要代码：
 
 - 后端：`V4__character_customization.sql`、`V5__one_conversation_per_character.sql`；`CharacterService`、`CharacterController`、`CharacterValidator`、`CharacterCatalog`、`CharacterPersona`、`CharacterPromptCompiler`；`ConversationProvisioner`、`ConversationService`、`CharacterStateController`、`MemoryService`、`AccountDeletionService` 按角色/唯一会话接入。
-- 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。会话侧栏移除手动新建，每角色唯一会话，行内操作改为清空聊天记录。
+- 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`useCharacterPreviews`、`avatarSourcePreferences`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。会话侧栏移除手动新建，每角色唯一会话，行内操作改为清空聊天记录。
 - 存储：官方角色矢量形象保留本机覆盖；自定义角色形象随账号；立绘/聊天主视觉 key 改为 `userId:characterId`，旧 `userId` 立绘在官方角色首次读取时迁移。
-- 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 35 项通过（V4+V5 history=5，CRUD/复制/切换/唯一会话/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 105 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
-- 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘、角色卡/切换器的立绘预览（当前用矢量头像，避免一次加载多套 IndexedDB 立绘；聊天/通话/编辑器仍优先立绘）。
+- 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 35 项通过（V4+V5 history=5，CRUD/复制/切换/唯一会话/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 108 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
+- 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘。
 - 未实现（P2）：每个角色独立音色/语速、关系起点、角色卡导出/导入、Live2D、更多外观资产。
 - 未在本沙箱验证：Electron 窗口视觉回归、IndexedDB 迁移的真实浏览器冒烟；Mockito 测试受沙箱 `MockMaker` 限制，需本机复跑。
