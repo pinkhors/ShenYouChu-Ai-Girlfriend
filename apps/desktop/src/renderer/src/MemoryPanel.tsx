@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, deleteMemory, listMemories, type MemoryView } from './api/client'
 import type { CharacterView } from './character/characterTypes'
+import MemoryGraph3DPanel from './memorygraph/MemoryGraph3DPanel'
 import MemoryGraphPanel from './memorygraph/MemoryGraphPanel'
 import Icon from './ui/Icon'
 import { formatTime } from './ui/time'
@@ -11,7 +12,7 @@ interface MemoryPanelProps {
 }
 
 type Scope = 'active' | 'all'
-type View = 'list' | 'graph'
+type View = 'list' | 'graph' | 'graph3d'
 
 function toMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -108,6 +109,17 @@ export default function MemoryPanel({ characters, activeCharacterId }: MemoryPan
             >
               星链
             </button>
+            <button
+              className={view === 'graph3d' ? 'memory-view-toggle__item memory-view-toggle__item--active' : 'memory-view-toggle__item'}
+              type="button"
+              role="tab"
+              aria-selected={view === 'graph3d'}
+              onClick={() => {
+                setView('graph3d')
+              }}
+            >
+              3D 星链
+            </button>
           </div>
           {view === 'list' && (
             <button
@@ -125,7 +137,12 @@ export default function MemoryPanel({ characters, activeCharacterId }: MemoryPan
         </div>
       </header>
 
-      {view === 'graph' ? (
+      {view === 'graph3d' ? (
+        <MemoryGraph3DPanel
+          characterId={activeCharacterId}
+          characterName={activeCharacter?.displayName ?? '她'}
+        />
+      ) : view === 'graph' ? (
         <MemoryGraphPanel
           characterId={activeCharacterId}
           characterName={activeCharacter?.displayName ?? '她'}

@@ -1,0 +1,391 @@
+/**
+ * 3D 星链（新增模式）：暖色纸感星盘，不替换 2D。
+ * 只写 mg3- 前缀，不碰全局样式。
+ */
+
+.mg3 {
+  --mg3-paper: #fcfaf7;
+  --mg3-ink: #3a3330;
+  --mg3-ink-soft: #6b615a;
+  --mg3-apricot: #b9805a;
+  --mg3-apricot-dark: #8a5a38;
+  --mg3-line: #d9cfc4;
+  --mg3-border: #e7e7e7;
+  --mg3-ghost: #b9afa5;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 560px;
+  padding: 24px 28px 28px;
+  background: var(--mg3-paper);
+  color: var(--mg3-ink);
+}
+
+.mg3-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.mg3-title {
+  margin: 0;
+  color: var(--mg3-ink);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mg3-meta {
+  margin: 4px 0 0;
+  color: var(--mg3-ink-soft);
+  font-size: 12px;
+}
+
+.mg3-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mg3-hint {
+  color: #9a8f86;
+  font-size: 11px;
+}
+
+.mg3-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mg3-state {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 320px;
+}
+
+.mg3-body {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.mg3-side {
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--mg3-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.mg3-eyebrow {
+  margin: 0;
+  color: #9a8f86;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.mg3-character {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.mg3-stats {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.mg3-stats div {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #faf6f1;
+  text-align: center;
+}
+
+.mg3-stats dt {
+  color: #9a8f86;
+  font-size: 11px;
+}
+
+.mg3-stats dd {
+  margin: 2px 0 0;
+  color: var(--mg3-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mg3-layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.mg3-layer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #eadfd3;
+  border-radius: 999px;
+  background: #fdf8f3;
+  color: #7c6758;
+  font-size: 11px;
+}
+
+.mg3-layer-chip b {
+  color: var(--mg3-apricot-dark);
+}
+
+.mg3-divider {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid #f0e9e1;
+}
+
+.mg3-hint-text {
+  margin: 0;
+  color: #9a8f86;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.mg3-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mg3-detail-head h4 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.mg3-back {
+  flex: none;
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  color: #9a8f86;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mg3-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: #9a8f86;
+  font-size: 11px;
+}
+
+.mg3-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f6ece3;
+  color: #8a5a38;
+  font-size: 11px;
+}
+
+.mg3-tag--ghost {
+  background: #f2f0ed;
+  color: #8f8881;
+}
+
+.mg3-field {
+  margin-top: 12px;
+}
+
+.mg3-field-label {
+  margin: 0 0 4px;
+  color: #9a8f86;
+  font-size: 11px;
+}
+
+.mg3-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mg3-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f6ece3;
+  color: #7c6758;
+  font-size: 11px;
+}
+
+.mg3-text {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #faf6f1;
+  color: #4a403a;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.mg3-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mg3-canvas {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--mg3-border);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 35%, #fffdfa 0%, #fcfaf7 55%, #f7f1e9 100%);
+}
+
+.mg3-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 460px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.mg3-svg:active {
+  cursor: grabbing;
+}
+
+.mg3-ring {
+  fill: none;
+  stroke: #d9cfc4;
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.mg3-edge {
+  stroke: #b9805a;
+  stroke-width: 1;
+}
+
+.mg3-edge--ownership {
+  stroke: rgba(185, 128, 90, 0.4);
+}
+
+.mg3-edge--semantic {
+  stroke: rgba(58, 51, 48, 0.28);
+  stroke-dasharray: 2 4;
+}
+
+.mg3-edge--temporal {
+  stroke: rgba(58, 51, 48, 0.2);
+  stroke-dasharray: 6 6;
+}
+
+.mg3-edge--active {
+  stroke: var(--mg3-apricot);
+  stroke-width: 1.8;
+  stroke-dasharray: none;
+}
+
+.mg3-node {
+  cursor: pointer;
+}
+
+.mg3-hit {
+  fill: transparent;
+}
+
+.mg3-selected {
+  fill: none;
+  stroke: var(--mg3-apricot);
+  stroke-width: 2;
+}
+
+.mg3-shape {
+  stroke: rgba(58, 51, 48, 0.35);
+  stroke-width: 1;
+}
+
+.mg3-shape--fact {
+  fill: #e8c9a8;
+}
+
+.mg3-shape--episode {
+  fill: #d8c7b6;
+}
+
+.mg3-shape--promise {
+  fill: #f6ece3;
+  stroke: var(--mg3-apricot);
+}
+
+.mg3-shape--habit {
+  fill: #f1dcc4;
+  stroke: #b9805a;
+}
+
+.mg3-shape--ghost {
+  fill: #f2f0ed;
+  stroke-dasharray: 3 3;
+}
+
+.mg3-inner {
+  fill: none;
+  stroke: var(--mg3-apricot);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.mg3-constellation {
+  fill: #8a7a6d;
+  font-size: 12px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #fcfaf7;
+  stroke-width: 3px;
+}
+
+.mg3-node-label {
+  fill: #3a3330;
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: #fcfaf7;
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+.mg3-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  margin: 0;
+  color: #a09286;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .mg3-body {
+    grid-template-columns: 1fr;
+  }
+
+  .mg3-side {
+    max-height: 240px;
+  }
+}

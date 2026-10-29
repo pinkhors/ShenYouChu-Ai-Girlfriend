@@ -441,6 +441,7 @@ cooldownMinutes = round(45 / coefficient)   // 53 / 45 / 39
 - 09 的“记忆”一词专指 `MemoryContext`；不再用 `MemoryView` 指代长期记忆。
 - 08 的 `MemoryItem` 字段变化时，09 只依赖 `type/text/source/createdAt` 四个稳定字段。
 - 任何“她记得”的能力必须以 08 的召回结果为准；09 不得在提示词里自行编造记忆。
+- 08 的 2D/3D 星图只是展示层；3D 投影不改变 `MemoryContext`、上下文预算或回复行为。
 
 ## 9. 输入输出汇总
 
