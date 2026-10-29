@@ -783,23 +783,6 @@ export default function App() {
     <>
       <div className="workspace">
         <nav className="rail" aria-label="主导航">
-          <button
-            className="rail__me"
-            type="button"
-            title={`${user.username} · 打开设置`}
-            aria-label="打开设置"
-            onClick={() => {
-              setSection('settings')
-            }}
-          >
-            <AvatarPortrait
-              config={activeCharacter?.avatarConfig ?? DEFAULT_AVATAR}
-              portraits={portraitAssets.portraits}
-              variant="avatar"
-              name={activeCharacter?.displayName ?? '我'}
-            />
-          </button>
-
           <CharacterSwitcher
             characters={displayCharacters}
             activeId={characters.activeId}
