@@ -1,4 +1,4 @@
-import { request } from '../api/client'
+import { activateCharacter as putActiveCharacter, request } from '../api/client'
 import {
   normalizeCharacter,
   type CharacterInput,
@@ -14,6 +14,12 @@ import {
 export interface CharacterMutationResult {
   readonly character: CharacterView | null
   readonly activeCharacterId: string | null
+}
+
+/** 切换角色的结果：当前角色 + 其唯一会话（后端 ensure 后回传）。 */
+export interface CharacterActivationResult {
+  readonly activeCharacterId: string | null
+  readonly conversationId: string | null
 }
 
 export interface CharacterPurgeResult {
@@ -117,12 +123,10 @@ export async function purgeCharacter(id: string, confirmName: string): Promise<C
   }
 }
 
-export async function activateCharacter(id: string): Promise<string | null> {
-  const raw = asRecord(
-    await request<unknown>('/preferences/active-character', {
-      method: 'PUT',
-      body: { characterId: id }
-    })
-  )
-  return readString(raw, 'activeCharacterId')
+export async function activateCharacter(id: string): Promise<CharacterActivationResult> {
+  const raw = asRecord(await putActiveCharacter(id))
+  return {
+    activeCharacterId: readString(raw, 'activeCharacterId'),
+    conversationId: readString(raw, 'conversationId')
+  }
 }

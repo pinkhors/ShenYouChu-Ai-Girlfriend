@@ -1,7 +1,7 @@
 # 女友角色设定（Character Studio）功能设计
 
 - 版本：v1.0
-- 状态：P0 已实现；P1 核心项已实现（草稿自动备份、角色卡统计、复制立绘等未做）；P2 未实现；V4 已在本机 MySQL 8 执行并通过 API 冒烟；Electron 视觉回归与 IndexedDB 迁移待本机验证
+- 状态：P0 已实现；P1 核心项已实现（草稿自动备份、角色卡统计、复制立绘等未做）；P2 未实现；V4/V5 已在本机 MySQL 8 执行并通过 API 冒烟；Electron 视觉回归与 IndexedDB 迁移待本机验证
 - 关联：[产品需求文档](./01-product-requirements.md) FR-2.1 / FR-2.3 / FR-2.4 / FR-2.5 / FR-2.6、[数据与接口契约](./contracts/data-and-interface-contracts.md) §2.2–2.5、[开发规范](./03-development-standards.md)
 - 范围：桌面端角色的创建、编辑、保存、切换，以及和现有聊天、形象、记忆、通话、设置的衔接
 
@@ -12,7 +12,7 @@
 1. **角色是一等对象**。用户可保存多个角色；每个角色有独立的形象、性格、家庭背景，以及独立的会话、记忆和心情/亲密度。
 2. **官方角色人设只读，自定义角色可编辑**。沈幼楚保留为默认角色和品牌锚点；她的本机形象可以继续调整，但要改人设就“复制为我的角色”，避免官方人设被改坏。
 3. **三类设定 + 两个基础层**。基础身份（名字、年龄、一句话介绍）→ 形象 → 性格 → 家庭背景；另有一层不可关闭的安全边界。
-4. **切换 = 换“当前角色”**。会话在创建时绑定角色，之后不能中途换人；换人就是换到她的会话或开新会话。
+4. **切换 = 换“当前角色”，每个角色只有一条会话**。用户与角色严格一对一；创建角色时自动生成唯一会话，不能手动新建；换人就是切到她的那一条会话。
 5. **自定义角色定义存服务端，立绘存本机**。自定义角色的人设与形象参与提示词和跨设备展示，必须服务端持久化；官方角色的人设只读，形象是本机覆盖；AI 立绘体积大，继续本机 IndexedDB，按“用户 + 角色”隔离。
 
 这五个决策决定了后面的界面、数据和迁移方案。
@@ -533,18 +533,28 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 |---|---|---|---|
 | 保存 | 编辑器底部 / Ctrl/Cmd+S | 校验 → POST/PATCH → 更新缓存 → toast | 失败保留草稿；版本冲突提示重新加载 |
 | 保存并切换 | 编辑器 | 保存成功后设为当前角色，跳到聊天 | 保存失败则不切换 |
-| 切换当前角色 | 切换器 / 角色卡“使用” / 聊天头部 | PUT active → 打开她的最近会话或空态 | 乐观更新，失败回滚；编辑器有脏数据先确认 |
-| 新建 | 角色中心 / 切换器 | 打开模板选择 → 新建向导 | 未保存离开时三选一 |
-| 复制 | 角色卡“更多” / 官方角色 | POST duplicate → 打开副本编辑器 | 名字冲突自动追加“的副本 2” |
+| 切换当前角色 | 切换器 / 角色卡“使用” / 聊天头部 | PUT active → 确保唯一会话并返回 `conversationId` → 打开该会话 | 乐观更新，失败回滚；编辑器有脏数据先确认 |
+| 新建 | 角色中心 / 切换器 | 打开模板选择 → 新建向导；保存时同事务自动创建唯一会话 | 未保存离开时三选一；不再有手动“新建会话” |
+| 复制 | 角色卡“更多” / 官方角色 | POST duplicate → 打开副本编辑器；副本自动获得唯一会话 | 名字冲突自动追加“的副本 2” |
 | 归档 | 角色卡“更多” | POST archive → 从切换器/新建列表移除；会话保留 | 当前角色归档时自动切到官方并提示 |
-| 彻底删除 | 归档角色详情 | 二次确认 + 输入角色名 → POST purge | 级联删除会话/消息/记忆/状态/本机立绘；不可恢复 |
+| 清空聊天记录 | 会话行内操作 | POST clear → 逻辑删除消息/记忆，保留会话，重置标题/最后消息时间 | 二次确认，说明不可恢复 |
+| 彻底删除 | 归档角色详情 | 二次确认 + 输入角色名 → POST purge | 级联删除该角色唯一会话/消息/记忆/状态/本机立绘；不可恢复 |
 | 取消编辑 | 返回 | 有修改时弹“保存并离开 / 放弃修改 / 继续编辑” | 无修改直接返回 |
+
+#### 4.5.1 一对一唯一会话规则
+
+- **唯一性**：`conversations` 增加 `UNIQUE(user_id, character_id)`；服务层所有创建走 `ConversationProvisioner.ensure`，并发冲突由唯一键兜底并回查。
+- **自动创建时机**：新建自定义角色、复制角色时在同一事务内创建；官方角色和存量角色在首次 `GET /conversations` 时按用户可见且 active 的角色幂等补建；恢复角色时 ensure。
+- **重复创建处理**：`POST /conversations` 为幂等 ensure——已存在返回 200 + 原会话，新建返回 201；不再接受自定义标题。
+- **删除处理**：`DELETE /conversations/{id}` 返回 409 `CONVERSATION_DELETE_NOT_ALLOWED`；改为 `POST /conversations/{id}/clear`，只清消息/记忆，会话行保留。
+- **切换处理**：`PUT /preferences/active-character` 返回 `conversationId`，前端直接打开，不再调用创建接口。
+- **迁移**：V5 先按 `(user_id, character_id)` 合并重复会话（保留最新 active，迁移 messages/memories/activity_events），清理仅 deleted 的组，再加唯一键。
 
 补充规则：
 
 - **保存与切换分离**：编辑器的保存不会自动把角色设为当前；只有“保存并切换”或切换器才会。
-- **会话不可换人**：已有会话的 `character_id` 不可改；要换人只能新建会话或切到她的会话。
-- **归档不等于停用**：归档角色从切换器和新建入口消失，但已有会话仍可继续聊，也可恢复；彻底删除才清理数据。
+- **会话一对一且不可删除**：每个 `(user, character)` 只有一条会话，创建角色/复制角色时自动生成；用户不能手动新建，也不能删除会话，只能清空聊天记录。
+- **归档不等于停用**：归档角色从切换器和新建入口消失，但已有唯一会话仍可继续聊，也可恢复；彻底删除才清理数据。
 - **删除当前角色**：先自动切到官方沈幼楚，再执行归档/删除，避免当前角色悬空。
 - **切换时正在回复**：允许切换；当前轮次在服务端继续，回来时重新拉取消息（沿用现有后台轮次机制）。
 - **离线**：角色列表可用本地缓存展示；保存/切换需要服务端，失败时明确提示“当前离线，修改已保留在草稿”。
@@ -577,7 +587,7 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 3. **原有“形象”能力不丢**。捏脸、立绘、随机、模板、立绘生成全部保留，只是从“用户级”下沉到“角色级”。
 4. **会话列表不做成“每个角色一个列表”**。用顶部角色切换器 + “当前角色 / 全部”筛选，既清晰又不会让用户找不到旧会话。
 5. **记忆页必须显示角色**。多条记忆混在一起会让人误以为“她记得我对别人说过的话”；默认按当前角色筛选，可切“全部”。
-6. **新建会话默认当前角色**。如果用户在新建表单里换了角色，创建成功后同步切换当前角色，保证顶部、侧栏、会话三者一致，避免“当前角色是 A，正在聊 B”。
+6. **会话唯一，不再手动新建**。每个用户对同一角色只有一条会话；角色创建/复制时自动创建，官方/存量角色首次拉取列表时幂等补建；前端移除“新建会话”入口。
 
 ### 4.7 界面细节与无障碍
 
@@ -597,7 +607,8 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 复用现有 `characters` 表，增加“归属、形象、状态、版本”字段，避免另起一张表后还要把会话/状态表改成多态引用。
 
 ```sql
--- V4__character_customization.sql（提案）
+-- V4__character_customization.sql / V5__one_conversation_per_character.sql（提案）
+-- 会话唯一键与重复数据合并位于 V5；其余字段位于 V4。
 ALTER TABLE characters
     ADD COLUMN owner_user_id BIGINT NULL AFTER id,
     ADD COLUMN source_character_id BIGINT NULL AFTER owner_user_id,
@@ -620,6 +631,7 @@ CREATE TABLE user_preferences (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
 
 ALTER TABLE conversations
+    ADD UNIQUE KEY uk_conversations_user_character (user_id, character_id),
     ADD INDEX idx_conversations_user_character_last (user_id, character_id, last_message_at);
 
 ALTER TABLE memories
@@ -716,10 +728,12 @@ WHERE m.character_id IS NULL;
 | POST | `/api/v1/characters/{id}/archive` | 归档；若为当前角色，服务端回退官方并返回新当前角色 |
 | POST | `/api/v1/characters/{id}/restore` | 恢复归档 |
 | POST | `/api/v1/characters/{id}/purge` | 彻底删除；body `{ "confirmName": "林晚" }` |
-| PUT | `/api/v1/preferences/active-character` | body `{ "characterId": "..." }` |
+| PUT | `/api/v1/preferences/active-character` | body `{ "characterId": "..." }`；返回 `{activeCharacterId, conversationId}` |
 | GET | `/api/v1/character-state?characterId=...` | 不传则用当前角色，兼容旧调用 |
-| GET | `/api/v1/conversations?characterId=...` | 可选按角色筛选 |
-| POST | `/api/v1/conversations` | `characterId` 不传则用当前角色；拒绝归档角色 |
+| GET | `/api/v1/conversations?characterId=...` | 查询前按角色 ensure；每个角色最多一条 |
+| POST | `/api/v1/conversations` | 幂等 ensure：已存在 200 + 原会话，新建 201；title 已废弃；归档角色 409 |
+| POST | `/api/v1/conversations/{id}/clear` | 清空聊天记录，保留会话；204 |
+| DELETE | `/api/v1/conversations/{id}` | 不允许删除，409 `CONVERSATION_DELETE_NOT_ALLOWED` |
 | GET | `/api/v1/memories?characterId=...` | 可选按角色筛选（P1） |
 
 `CharacterView`：
@@ -789,7 +803,7 @@ WHERE m.character_id IS NULL;
 
 1. **角色表**：官方沈幼楚补 `avatar_config` 默认值；`owner_user_id` 保持 NULL；`status='active'`；`version=0`。
 2. **当前角色**：为每个已有用户写入 `active_character_id = 沈幼楚`；没有偏好记录时读取也回退官方。
-3. **会话**：已有会话的 `character_id` 已经是沈幼楚，不需要改；按 `user_id, character_id, last_message_at` 补索引。
+3. **会话**：V5 按 `(user_id, character_id)` 合并重复会话、迁移 messages/memories/activity_events，清理仅 deleted 的组，再加唯一键；存量角色缺会话时由首次 `GET /conversations` 幂等补建。
 4. **记忆**：按 `conversation_id` 回填 `character_id`；回填失败的记录保持 NULL，列表按“未知角色”展示，不阻塞。
 5. **捏脸**：读取旧 key `shenyouchu.avatar.v1.<userId>`，将其作为官方角色的**本机形象覆盖**（新 key 可用 `shenyouchu.official-avatar.v1.<userId>`，也可以直接沿用旧 key）。旧会话继续使用这个形象，不换脸。
    - 首次进入角色页给一次性说明：“你之前为沈幼楚调整过形象，已保留在本机。想连人设一起改，可以复制为我的角色。”
@@ -804,7 +818,7 @@ WHERE m.character_id IS NULL;
 
 - 所有角色接口都从认证上下文取 `userId`，不接受客户端传入的 owner。
 - 读取/修改/删除他人自定义角色一律 404；官方角色写操作 403。
-- 新会话创建时校验 `character` 为官方或本人所有，且 `status='active'`；归档角色只能继续已有会话。
+- 新会话 ensure 时校验 `character` 为官方或本人所有，且 `status='active'`；归档角色只能继续已有会话。
 - `GET /character-state` 的 `characterId` 同样只接受官方或本人所有，防止通过状态接口探测他人角色。
 - 提示词只由服务端编译；客户端不能提交系统提示词或模型参数。
 - 自由文本字段限长、去换行、引号包裹；边界文本最后追加。
@@ -819,7 +833,7 @@ WHERE m.character_id IS NULL;
 ```text
 角色中心 → 新建 → 选模板/空白 → 填名字年龄 → 调形象 → 选性格 → 选家庭
 → 保存并创建 → POST /characters → 角色中心新卡高亮
-→ [设为当前并聊天] → PUT active → 打开空会话/最近会话
+→ [设为当前并聊天] → PUT active → 打开她的唯一会话（后端 ensure）
 ```
 
 ### 6.2 切换当前角色
@@ -827,7 +841,7 @@ WHERE m.character_id IS NULL;
 ```text
 点击切换器 → 选角色 → 乐观更新当前角色
 → PUT /preferences/active-character
-→ 成功：加载该角色立绘 + 关系状态；打开最近会话或空态
+→ 成功：加载该角色立绘 + 关系状态；打开返回的唯一 conversationId
 → 失败：回滚到上一个角色，toast 失败原因
 ```
 
@@ -902,7 +916,7 @@ POST /conversations/{id}/turns/stream
 ### 8.3 安全与隔离
 
 - [ ] A 无法读取/修改/删除 B 的自定义角色（404）。
-- [ ] A 无法用 B 的 characterId 创建会话。
+- [ ] A 无法用 B 的 characterId 创建会话或读取其唯一会话。
 - [ ] 官方角色写操作返回 403。
 - [ ] 客户端提交任意系统提示词字段被拒绝（DTO 不接收该字段）。
 - [ ] 所有角色提示词都包含固定边界，且边界在最后。
@@ -952,7 +966,7 @@ POST /conversations/{id}/turns/stream
 |---|---|---|
 | C-1 | 官方沈幼楚的人设是否允许直接改？ | 不允许；官方矢量形象可本机覆盖以兼容旧数据；要跨设备保存形象或改人设，复制为自定义角色 |
 | C-2 | 当前角色是全局还是分设备？ | 服务端全局，换设备一致 |
-| C-3 | 已有会话能否中途换角色？ | 不能；会话创建时绑定，换人开新会话 |
+| C-3 | 已有会话能否中途换角色？ | 不能；每个用户-角色只有一条唯一会话，换人切到她的会话 |
 | C-4 | 是否允许 60 字补充设定？ | 允许，限长 + 去换行 + 边界最后兜底 |
 | C-5 | 自定义角色上限？ | 12 个（含归档），官方不计入 |
 | C-6 | 归档角色的已有会话还能聊吗？ | 能；归档只影响切换器和新建入口 |
@@ -1004,10 +1018,10 @@ POST /conversations/{id}/turns/stream
 
 已完成 P0 与 P1 核心项的主要代码：
 
-- 后端：`V4__character_customization.sql`；`CharacterService`、`CharacterController`、`CharacterValidator`、`CharacterCatalog`、`CharacterPersona`、`CharacterPromptCompiler`；`user_preferences`；`CharacterStateController`、`ConversationService`、`MemoryService`、`AccountDeletionService` 按角色接入。
-- 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。
+- 后端：`V4__character_customization.sql`、`V5__one_conversation_per_character.sql`；`CharacterService`、`CharacterController`、`CharacterValidator`、`CharacterCatalog`、`CharacterPersona`、`CharacterPromptCompiler`；`ConversationProvisioner`、`ConversationService`、`CharacterStateController`、`MemoryService`、`AccountDeletionService` 按角色/唯一会话接入。
+- 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。会话侧栏移除手动新建，每角色唯一会话，行内操作改为清空聊天记录。
 - 存储：官方角色矢量形象保留本机覆盖；自定义角色形象随账号；立绘/聊天主视觉 key 改为 `userId:characterId`，旧 `userId` 立绘在官方角色首次读取时迁移。
-- 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 32 项通过（V4 history=4，CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 84 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
+- 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 35 项通过（V4+V5 history=5，CRUD/复制/切换/唯一会话/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 105 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
 - 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘、角色卡/切换器的立绘预览（当前用矢量头像，避免一次加载多套 IndexedDB 立绘；聊天/通话/编辑器仍优先立绘）。
 - 未实现（P2）：每个角色独立音色/语速、关系起点、角色卡导出/导入、Live2D、更多外观资产。
 - 未在本沙箱验证：Electron 窗口视觉回归、IndexedDB 迁移的真实浏览器冒烟；Mockito 测试受沙箱 `MockMaker` 限制，需本机复跑。

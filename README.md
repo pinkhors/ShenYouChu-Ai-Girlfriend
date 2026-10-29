@@ -2,7 +2,7 @@
 
 多人各自与 AI 角色进行一对一文本、语音和视频陪伴的桌面应用项目。官方角色为**沈幼楚**，用户也可以创建并切换自己的女友角色（形象 / 性格 / 家庭背景）。
 
-当前状态：**M0 后端、M1 文本伴侣、M2 语音占位链路均已通过真实环境端到端验收；角色自定义 P0 与 P1 核心项已实现，V4 已在本机 MySQL 8 执行并通过 32 项 API 冒烟（CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离/记忆按角色），前端类型检查与 84 个单元测试通过**；Electron 视觉回归需在本机执行。
+当前状态：**M0 后端、M1 文本伴侣、M2 语音占位链路均已通过真实环境端到端验收；角色自定义 P0 与 P1 核心项已实现，V4+V5 已在本机 MySQL 8 执行并通过 35 项 API 冒烟（CRUD/复制/切换/每角色唯一会话/归档/恢复/彻底删除/跨用户隔离/记忆按角色），前端类型检查与 105 个单元测试通过**；Electron 视觉回归需在本机执行。
 
 一条命令复现全部验收：
 
@@ -37,8 +37,9 @@ POST /auth/logout     退出（Bearer token）
 GET  /auth/me         当前用户
 GET  /characters      官方 + 我的角色（支持创建/编辑/复制/归档/彻底删除）
 GET/PUT /preferences/active-character  当前角色
-GET/POST /conversations           会话列表/创建（可按 characterId 筛选/绑定）
-GET/DELETE /conversations/{id}    会话详情/删除（归属校验）
+GET/POST /conversations           每角色唯一会话：列表/幂等 ensure（可按 characterId 筛选）
+GET/DELETE /conversations/{id}    会话详情（删除返回 409）
+POST /conversations/{id}/clear    清空聊天记录（保留会话）
 POST /conversations/{id}/turns         文本轮次（人设回复 + 记忆 + 活动事件）
 POST /conversations/{id}/turns/stream  SSE 流式轮次（turn.started / assistant.text.delta / turn.completed）
 POST /conversations/{id}/turns/{turnId}/cancel  取消进行中的流式轮次（仅归属者）

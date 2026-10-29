@@ -3,9 +3,11 @@ package com.shenyouchu.core.conversation;
 import com.shenyouchu.core.conversation.dto.ConversationPage;
 import com.shenyouchu.core.conversation.dto.ConversationView;
 import com.shenyouchu.core.conversation.dto.CreateConversationRequest;
+import com.shenyouchu.core.conversation.dto.EnsureConversationResult;
 import com.shenyouchu.core.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,10 +36,17 @@ public class ConversationController {
         return conversationService.list(CurrentUser.require().userId(), limit, cursor, characterId);
     }
 
+    /**
+     * 幂等创建会话：已存在返回 200 + 已有会话；本次新建返回 201 + 新会话。
+     * 请求体仍可传 characterId；title 已废弃并被忽略。
+     */
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ConversationView create(@Valid @RequestBody CreateConversationRequest request) {
-        return conversationService.create(CurrentUser.require().userId(), request);
+    public ResponseEntity<ConversationView> create(
+            @Valid @RequestBody(required = false) CreateConversationRequest request) {
+        EnsureConversationResult result =
+                conversationService.create(CurrentUser.require().userId(), request);
+        HttpStatus status = result.created() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(result.conversation());
     }
 
     @GetMapping("/{id}")
@@ -45,8 +54,15 @@ public class ConversationController {
         return conversationService.get(CurrentUser.require().userId(), id);
     }
 
-    @DeleteMapping("/{id}")
+    /** 清空聊天记录（逻辑删除消息/记忆），会话行保留。 */
+    @PostMapping("/{id}/clear")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clear(@PathVariable Long id) {
+        conversationService.clear(CurrentUser.require().userId(), id);
+    }
+
+    /** 会话不允许删除；服务层抛出 409 CONVERSATION_DELETE_NOT_ALLOWED。 */
+    @DeleteMapping("/{id}")
     public void delete(@PathVariable Long id) {
         conversationService.delete(CurrentUser.require().userId(), id);
     }

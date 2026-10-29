@@ -9,7 +9,8 @@ function recorder(): { events: string[]; handlers: TurnStreamHandlers } {
     handlers: {
       onStarted: (turnId) => events.push(`started:${turnId}`),
       onDelta: (delta) => events.push(`delta:${delta}`),
-      onCompleted: (turnId, messageId) => events.push(`completed:${turnId}:${messageId}`)
+      onCompleted: (turnId, messageId) => events.push(`completed:${turnId}:${messageId}`),
+      onFailed: (code, message) => events.push(`failed:${code}:${message}`)
     }
   }
 }
@@ -57,4 +58,15 @@ test('ignores unknown events and invalid json', () => {
   parser.push('event: assistant.text.delta\ndata: {"delta":"ok"}\n\n')
 
   assert.deepEqual(events, ['delta:ok'])
+})
+
+test('surfaces turn.failed so the client can show the failure', () => {
+  const { events, handlers } = recorder()
+  const parser = new TurnStreamParser(handlers)
+
+  parser.push(
+    'event: turn.failed\ndata: {"code":"INTERNAL_ERROR","message":"本轮回复失败，请重试"}\n\n'
+  )
+
+  assert.deepEqual(events, ['failed:INTERNAL_ERROR:本轮回复失败，请重试'])
 })

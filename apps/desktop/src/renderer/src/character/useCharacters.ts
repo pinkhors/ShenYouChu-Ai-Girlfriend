@@ -8,7 +8,8 @@ import {
   listCharacters,
   purgeCharacter,
   restoreCharacter,
-  updateCharacter
+  updateCharacter,
+  type CharacterActivationResult
 } from './characterApi'
 import {
   draftToInput,
@@ -39,7 +40,7 @@ export interface CharacterManager {
   readonly refresh: () => Promise<void>
   readonly create: (draft: CharacterDraft) => Promise<CharacterView | null>
   readonly update: (id: string, draft: CharacterDraft, version: number) => Promise<CharacterView | null>
-  readonly activate: (id: string) => Promise<void>
+  readonly activate: (id: string) => Promise<CharacterActivationResult>
   readonly duplicate: (
     id: string,
     displayName?: string,
@@ -141,15 +142,19 @@ export function useCharacters(userId: string | null): CharacterManager {
   )
 
   const activate = useCallback(
-    async (id: string): Promise<void> => {
-      const activeId = await activateCharacter(id)
-      if (activeId === null) {
+    async (id: string): Promise<CharacterActivationResult> => {
+      const result = await activateCharacter(id)
+      if (result.activeCharacterId === null) {
         await refresh()
-        return
+        return result
       }
       setCharacters((previous) =>
-        previous.map((character) => ({ ...character, isActive: character.id === activeId }))
+        previous.map((character) => ({
+          ...character,
+          isActive: character.id === result.activeCharacterId
+        }))
       )
+      return result
     },
     [refresh]
   )

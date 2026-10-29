@@ -10,9 +10,7 @@ import {
 } from 'react'
 import {
   ApiError,
-  cancelTurn,
   listMessages,
-  streamTurn,
   type CharacterState,
   type Conversation,
   type Message
@@ -20,17 +18,19 @@ import {
 import type { CharacterView } from './character/characterTypes'
 import { prependOlderMessages } from './chat/messagePages'
 import {
-  addPendingMessage,
-  dropPendingMessage,
   getPendingMessages,
   reconcilePendingMessages,
   subscribePendingMessages
 } from './chat/pendingStore'
+import { newestMessageId, toDisplayMessage } from './chat/pendingMessages'
 import {
-  createPendingUserMessage,
-  newestMessageId,
-  toDisplayMessage
-} from './chat/pendingMessages'
+  clearSettledTurn,
+  consumeFailedText,
+  getTurnSession,
+  startTurn,
+  stopTurn,
+  subscribeTurnSessions
+} from './chat/turnSessions'
 import AvatarPortrait from './portrait/AvatarPortrait'
 import { resolvePortrait, type PortraitSet } from './portrait/expression'
 import Icon from './ui/Icon'
@@ -45,8 +45,6 @@ interface ChatViewProps {
   readonly userName: string
   readonly characterSwitcher?: ReactNode
   readonly onCall: () => void
-  /** 后台轮次落库后的通知：让应用层刷新会话列表，并按需重新加载当前会话 */
-  readonly onTurnSettled: (conversationId: string) => void
   /** 外部要求重新拉取消息的版本号；变化即回源，不重建组件（保留输入框内容） */
   readonly reloadToken: number
 }
@@ -77,24 +75,19 @@ export default function ChatView({
   userName,
   characterSwitcher,
   onCall,
-  onTurnSettled,
   reloadToken
 }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
-  const [streamingText, setStreamingText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSending, setIsSending] = useState(false)
   const [heroFailed, setHeroFailed] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const activeTurnIdRef = useRef<string | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
-  const mountedRef = useRef(true)
-  const onTurnSettledRef = useRef(onTurnSettled)
   const stickToBottomRef = useRef(true)
+  /* 回源请求序号：并发回源时只接受最后一次响应 */
+  const loadSeqRef = useRef(0)
 
   /*
    * 占位消息存放在模块级 store 里（按会话 id），不随 ChatView 卸载丢失：
@@ -103,23 +96,41 @@ export default function ChatView({
   const pendingSnapshot = useCallback(() => getPendingMessages(conversation.id), [conversation.id])
   const pending = useSyncExternalStore(subscribePendingMessages, pendingSnapshot)
 
-  useEffect(() => {
-    onTurnSettledRef.current = onTurnSettled
-  }, [onTurnSettled])
+  /*
+   * 回合（SSE 流）同样按会话存放在模块级 store 里：切换到角色/记忆/设置页或切换会话
+   * 都不会中断本轮；切回来仍能看到流式文本与“停止”按钮，结束后由应用层触发回源。
+   */
+  const turnSnapshot = useCallback(() => getTurnSession(conversation.id), [conversation.id])
+  const turn = useSyncExternalStore(subscribeTurnSessions, turnSnapshot)
+  const streamingText = turn.streamingText
+  const isSending = turn.isSending
 
   const load = useCallback(async () => {
+    /* 请求序号：挂载、reloadToken、回合结束可能并发触发回源，只认最后一次响应 */
+    const requestId = loadSeqRef.current + 1
+    loadSeqRef.current = requestId
     setIsLoading(true)
     try {
       const page = await listMessages(conversation.id)
+      if (loadSeqRef.current !== requestId) {
+        return
+      }
       setMessages(page.items)
       /* 服务端已落库的消息会顶替本地占位，避免重复展示 */
       reconcilePendingMessages(conversation.id, page.items)
       setNextCursor(page.nextCursor)
       setError(null)
+      /* 已结束回合的流式文本已由服务端消息接替，清空残留（错误提示保留） */
+      clearSettledTurn(conversation.id)
     } catch (loadError) {
+      if (loadSeqRef.current !== requestId) {
+        return
+      }
       setError(toMessage(loadError))
     } finally {
-      setIsLoading(false)
+      if (loadSeqRef.current === requestId) {
+        setIsLoading(false)
+      }
     }
   }, [conversation.id])
 
@@ -128,15 +139,17 @@ export default function ChatView({
   }, [load, reloadToken])
 
   /*
-   * 切换主导航会卸载本组件，但本轮 SSE 不中断：服务端仍在生成并最终落库，
-   * 结束时用 onTurnSettled 通知应用层刷新会话列表与当前会话。
+   * 服务端未落库就失败的发送：把正文回填输入框，避免“消息消失还得重新打字”。
+   * 取走即清除标记，回到会话时也只回填一次。
    */
+  const failedText = turn.failedText
   useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
+    if (failedText === null) {
+      return
     }
-  }, [])
+    setDraft((current) => (current === '' ? failedText : current))
+    consumeFailedText(conversation.id)
+  }, [failedText, conversation.id])
 
   useEffect(() => {
     if (!stickToBottomRef.current) {
@@ -153,7 +166,12 @@ export default function ChatView({
     }
     setIsLoadingMore(true)
     try {
+      const requestId = loadSeqRef.current
       const page = await listMessages(conversation.id, 20, nextCursor)
+      if (loadSeqRef.current !== requestId) {
+        /* 期间发生了整页回源，这次翻页结果已过期 */
+        return
+      }
       /* 更早的消息接在顶部，保持时间顺序；此时不要把视图拉回底部 */
       stickToBottomRef.current = false
       setMessages((previous) => prependOlderMessages(previous, page.items))
@@ -166,96 +184,37 @@ export default function ChatView({
     }
   }
 
-  const sendMessage = async (): Promise<void> => {
+  const sendMessage = (): void => {
     const text = draft.trim()
     if (text === '' || isSending) {
       return
     }
-
-    const pendingMessage = createPendingUserMessage(text, newestMessageId(messages))
+    /*
+     * 整轮交给模块级 store：占位消息在 store 内部登记，SSE 与停止按钮都不再依赖
+     * 组件是否挂载；结束后的回源由应用层订阅 store 触发。
+     * 只有被受理才清空草稿，被拒绝（已有一轮在跑）时保留输入。
+     */
+    if (!startTurn(conversation.id, text, newestMessageId(messages))) {
+      return
+    }
     setDraft('')
     setError(null)
-    setStreamingText('')
-    setIsSending(true)
-    /* 先本地占位：不等服务端落库，用户消息立刻出现在会话里（存放在跨视图的 store 里） */
-    addPendingMessage(conversation.id, pendingMessage)
-
-    /**
-     * 本轮结束后的收尾：仍在本会话就回源对齐；
-     * 已经切走（组件卸载）则交给应用层刷新会话列表和当前视图。
-     */
-    const settle = (): void => {
-      if (mountedRef.current) {
-        void load()
-        return
-      }
-      onTurnSettledRef.current(conversation.id)
-    }
-
-    const controller = new AbortController()
-    abortRef.current = controller
-    let started = false
-
-    try {
-      await streamTurn(
-        conversation.id,
-        text,
-        {
-          onStarted: (turnId) => {
-            started = true
-            activeTurnIdRef.current = turnId
-          },
-          onDelta: (delta) => {
-            setStreamingText((previous) => previous + delta)
-          },
-          onCompleted: () => {
-            activeTurnIdRef.current = null
-            settle()
-          }
-        },
-        controller.signal
-      )
-    } catch (sendError) {
-      if (sendError instanceof DOMException && sendError.name === 'AbortError') {
-        /* 用户主动停止：服务端可能已落库，回源对齐 */
-        settle()
-      } else {
-        setError(toMessage(sendError))
-        if (!started) {
-          /* 尚未落库：撤回占位消息并把文本放回输入框，便于重发 */
-          dropPendingMessage(conversation.id, pendingMessage.localId)
-          setDraft((current) => (current === '' ? text : current))
-        }
-        settle()
-      }
-    } finally {
-      setIsSending(false)
-      setStreamingText('')
-      activeTurnIdRef.current = null
-      abortRef.current = null
-    }
   }
 
   const handleStop = (): void => {
-    const turnId = activeTurnIdRef.current
-    abortRef.current?.abort()
-    if (turnId !== null) {
-      void cancelTurn(conversation.id, turnId).catch(() => {
-        /* 轮次可能已自然结束，取消失败不影响界面 */
-      })
-    }
+    stopTurn(conversation.id)
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
-      void sendMessage()
+      sendMessage()
     }
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    void sendMessage()
+    sendMessage()
   }
 
   const pendingItems = pending.map(toDisplayMessage)
@@ -263,10 +222,12 @@ export default function ChatView({
   const pendingIds = new Set(pendingItems.map((item) => item.id))
   const isEmpty = timeline.length === 0 && streamingText === ''
   const hasMessages = timeline.length > 0 || streamingText !== '' || isSending
+  /* 回合失败优先展示（用户最需要看到发送失败原因）；本地 error 只用于列表加载失败 */
+  const displayError = turn.error ?? error
   const heroSource = heroImage ?? resolvePortrait(portraits, 'neutral')
 
   return (
-    <section className="chat chat--rose" aria-label={`与${character.displayName}的会话：${conversation.title ?? '未命名会话'}`}>
+    <section className="chat chat--rose" aria-label={`和${character.displayName}的会话`}>
       <header className="chat__topbar">
         <div className="chat__brand">
           <span className="chat__heart" aria-hidden="true">
@@ -327,7 +288,7 @@ export default function ChatView({
         )}
         <div className="chat__hero-caption">
           <strong>{character.displayName}</strong>
-          <span>{conversation.title ?? '今天也在陪你'}</span>
+          <span>{conversation.title ?? `和${character.displayName}的会话`}</span>
         </div>
         <button className="chat__hero-call" type="button" onClick={onCall}>
           <Icon name="mic" size={18} />
@@ -336,9 +297,9 @@ export default function ChatView({
       </section>
 
       <div className="chat__messages">
-        {error !== null && (
+        {displayError !== null && (
           <p className="alert" role="alert">
-            {error}
+            {displayError}
           </p>
         )}
 
@@ -395,11 +356,11 @@ export default function ChatView({
                   ) : (
                     <span className="bubble-avatar">
                       <AvatarPortrait
-                      config={character.avatarConfig}
-                      portraits={portraits}
-                      variant="avatar"
-                      name={character.displayName}
-                    />
+                        config={character.avatarConfig}
+                        portraits={portraits}
+                        variant="avatar"
+                        name={character.displayName}
+                      />
                     </span>
                   )}
                   <div className={isUser ? 'bubble bubble--user' : 'bubble bubble--assistant'}>

@@ -211,12 +211,36 @@ export function listConversations(limit = 20, cursor?: string, characterId?: str
   return request<ConversationPage>(`/conversations?${query.toString()}`)
 }
 
+/**
+ * 建会话：每个角色最多一个，由后端 ensure。
+ * 已存在返回 200 + 既有会话，新建返回 201；前端不再主动调用。
+ */
 export function createConversation(input: CreateConversationInput = {}): Promise<Conversation> {
   return request<Conversation>('/conversations', { method: 'POST', body: input })
 }
 
+/** 保留导出仅为兼容旧调用点；会话不再允许删除（后端返回 409）。 */
 export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+/** 清空会话内的消息与记忆，保留会话本身（204）。 */
+export function clearConversation(id: string): Promise<void> {
+  return request<void>(`/conversations/${encodeURIComponent(id)}/clear`, { method: 'POST' })
+}
+
+/** PUT /preferences/active-character 响应：当前角色与其唯一会话。 */
+export interface ActiveCharacterResult {
+  readonly activeCharacterId: string | null
+  readonly conversationId: string | null
+}
+
+/** 切换当前角色；后端同时 ensure 该角色的唯一会话并回传其 id。 */
+export function activateCharacter(id: string): Promise<ActiveCharacterResult> {
+  return request<ActiveCharacterResult>('/preferences/active-character', {
+    method: 'PUT',
+    body: { characterId: id }
+  })
 }
 
 export interface Message {

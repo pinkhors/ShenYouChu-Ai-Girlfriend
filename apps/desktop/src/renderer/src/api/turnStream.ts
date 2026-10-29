@@ -5,6 +5,8 @@ export interface TurnStreamHandlers {
   readonly onStarted?: (turnId: string) => void
   readonly onDelta?: (delta: string) => void
   readonly onCompleted?: (turnId: string, messageId: string) => void
+  /** 服务端 `turn.failed`：本轮失败（后端不会补发 delta / completed） */
+  readonly onFailed?: (code: string, message: string) => void
 }
 
 /**
@@ -54,6 +56,11 @@ export class TurnStreamParser {
       this.handlers.onCompleted?.(
         readPayloadField(parsed.data, 'turnId') ?? '',
         readPayloadField(parsed.data, 'messageId') ?? ''
+      )
+    } else if (parsed.event === 'turn.failed') {
+      this.handlers.onFailed?.(
+        readPayloadField(parsed.data, 'code') ?? '',
+        readPayloadField(parsed.data, 'message') ?? ''
       )
     }
   }

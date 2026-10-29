@@ -21,9 +21,8 @@ public class UserPreferenceController {
 
     @PutMapping("/active-character")
     public ActiveCharacterResponse setActive(@RequestBody ActiveCharacterRequest request) {
-        String activeCharacterId = characterService.setActiveCharacter(
+        return characterService.setActiveCharacter(
                 CurrentUser.require().userId(),
                 request == null ? null : request.characterId());
-        return new ActiveCharacterResponse(activeCharacterId);
     }
 }

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shenyouchu.core.activity.ActivityService;
+import com.shenyouchu.core.character.dto.ActiveCharacterResponse;
 import com.shenyouchu.core.character.dto.CharacterMutationResult;
 import com.shenyouchu.core.character.dto.CharacterPurgeResult;
 import com.shenyouchu.core.character.dto.CharacterView;
@@ -16,6 +17,8 @@ import com.shenyouchu.core.character.dto.UpdateCharacterRequest;
 import com.shenyouchu.core.character.mapper.CharacterMapper;
 import com.shenyouchu.core.character.mapper.UserPreferenceMapper;
 import com.shenyouchu.core.common.ApiException;
+import com.shenyouchu.core.conversation.Conversation;
+import com.shenyouchu.core.conversation.ConversationProvisioner;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.mapper.MemoryMapper;
 import com.shenyouchu.core.message.mapper.MessageMapper;
@@ -56,6 +59,7 @@ public class CharacterService {
     private final CharacterMapper characterMapper;
     private final UserPreferenceMapper preferenceMapper;
     private final ConversationMapper conversationMapper;
+    private final ConversationProvisioner conversationProvisioner;
     private final MessageMapper messageMapper;
     private final MemoryMapper memoryMapper;
     private final UserCharacterStateMapper stateMapper;
@@ -67,6 +71,7 @@ public class CharacterService {
     public CharacterService(CharacterMapper characterMapper,
                             UserPreferenceMapper preferenceMapper,
                             ConversationMapper conversationMapper,
+                            ConversationProvisioner conversationProvisioner,
                             MessageMapper messageMapper,
                             MemoryMapper memoryMapper,
                             UserCharacterStateMapper stateMapper,
@@ -77,6 +82,7 @@ public class CharacterService {
         this.characterMapper = characterMapper;
         this.preferenceMapper = preferenceMapper;
         this.conversationMapper = conversationMapper;
+        this.conversationProvisioner = conversationProvisioner;
         this.messageMapper = messageMapper;
         this.memoryMapper = memoryMapper;
         this.stateMapper = stateMapper;
@@ -105,6 +111,20 @@ public class CharacterService {
             views.add(toView(row, activeId));
         }
         return views;
+    }
+
+    /**
+     * 可见且未归档的角色，供会话补建使用。
+     * 可见语义与 {@link #list(Long, boolean)} 一致：官方角色 + 本人自定义 + is_public 的存量角色。
+     */
+    @Transactional(readOnly = true)
+    public List<CharacterProfile> activeVisibleCharacters(Long userId) {
+        return characterMapper.selectList(Wrappers.<CharacterProfile>lambdaQuery()
+                .and(wrapper -> wrapper.isNull(CharacterProfile::getOwnerUserId)
+                        .or().eq(CharacterProfile::getPublicVisible, true)
+                        .or().eq(CharacterProfile::getOwnerUserId, userId))
+                .eq(CharacterProfile::getStatus, STATUS_ACTIVE)
+                .orderByAsc(CharacterProfile::getCreatedAt));
     }
 
     @Transactional(readOnly = true)
@@ -146,6 +166,8 @@ public class CharacterService {
         character.setStatus(STATUS_ACTIVE);
         character.setVersion(0L);
         insertCharacter(character);
+        /* 角色与会话同事务创建：每个 (userId, characterId) 只有一条会话。 */
+        conversationProvisioner.ensure(userId, character);
 
         activityService.record(userId, "character.created", "USER", "core", null, null, null,
                 payload(id, name));
@@ -248,6 +270,8 @@ public class CharacterService {
         copy.setStatus(STATUS_ACTIVE);
         copy.setVersion(0L);
         insertCharacter(copy);
+        /* 复制角色同样在同一事务内补建唯一会话。 */
+        conversationProvisioner.ensure(userId, copy);
 
         Map<String, Object> payload = payload(id, name);
         payload.put("sourceCharacterId", String.valueOf(source.getId()));
@@ -289,6 +313,8 @@ public class CharacterService {
             activityService.record(userId, "character.restored", "USER", "core", null, null, null,
                     payload(characterId, character.getDisplayName()));
         }
+        /* 恢复后确保会话存在：归档期间会话仍保留，这里对已有会话是幂等操作。 */
+        conversationProvisioner.ensure(userId, character);
         Long activeId = activeCharacterId(userId);
         CharacterProfile saved = characterMapper.selectById(characterId);
         return new CharacterMutationResult(toView(saved == null ? character : saved, activeId),
@@ -329,18 +355,20 @@ public class CharacterService {
         return new CharacterPurgeResult(String.valueOf(activeId), conversations, messages, memories, states);
     }
 
-    /** 切换当前角色：只接受官方或本人所有、且未归档的角色。 */
+    /** 切换当前角色：只接受官方或本人所有、且未归档的角色；同时确保该角色的唯一会话存在。 */
     @Transactional
-    public String setActiveCharacter(Long userId, String requestedCharacterId) {
+    public ActiveCharacterResponse setActiveCharacter(Long userId, String requestedCharacterId) {
         Long characterId = parseCharacterId(requestedCharacterId);
         CharacterProfile character = requireVisible(userId, characterId);
         if (STATUS_ARCHIVED.equals(character.getStatus())) {
             throw ApiException.conflict(CODE_ARCHIVED, "这个角色已归档，请先恢复后再切换。");
         }
         savePreference(userId, characterId);
+        Conversation conversation = conversationProvisioner.ensure(userId, character);
         activityService.record(userId, "character.activated", "USER", "core", null, null, null,
                 payload(characterId, character.getDisplayName()));
-        return String.valueOf(characterId);
+        return new ActiveCharacterResponse(String.valueOf(characterId),
+                String.valueOf(conversation.getId()));
     }
 
     /** 当前角色；偏好缺失、角色失效或归档时回退官方沈幼楚。 */

@@ -24,6 +24,8 @@ class ConversationServiceTest {
     @Mock
     private CharacterService characterService;
     @Mock
+    private ConversationProvisioner conversationProvisioner;
+    @Mock
     private ActivityService activityService;
     @Mock
     private MessageMapper messageMapper;
@@ -35,7 +37,8 @@ class ConversationServiceTest {
     @BeforeEach
     void setUp() {
         conversationService = new ConversationService(
-                conversationMapper, characterService, activityService, messageMapper, memoryMapper);
+                conversationMapper, characterService, conversationProvisioner,
+                activityService, messageMapper, memoryMapper);
     }
 
     @Test
@@ -45,5 +48,16 @@ class ConversationServiceTest {
         assertThatThrownBy(() -> conversationService.get(1L, 2L))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("会话不存在");
+    }
+
+    @Test
+    void deletingConversationReturnsConflictAndSuggestsClear() {
+        Conversation conversation = new Conversation(1L, 2L, null);
+        conversation.setId(3L);
+        when(conversationMapper.selectOne(any())).thenReturn(conversation);
+
+        assertThatThrownBy(() -> conversationService.delete(1L, 3L))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("清空聊天记录");
     }
 }

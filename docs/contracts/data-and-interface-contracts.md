@@ -111,17 +111,26 @@
 
 ### 2.4 conversations
 
+用户与角色之间的**唯一会话容器**：每个 `(user_id, character_id)` 恰好一条。
+
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | BIGINT | 主键（雪花 ID） |
 | user_id | BIGINT | 归属 |
 | character_id | BIGINT | 角色 |
-| title | VARCHAR(200) | 可空，可由首条消息生成 |
-| last_message_at | DATETIME(3) | 列表排序 |
+| title | VARCHAR(200) | 已废弃用户自定义；当前由系统置空，展示层回退“和{角色名}的会话” |
+| last_message_at | DATETIME(3) | 列表排序；清空聊天记录时置空 |
 | status | VARCHAR(20) | active / archived |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
 
-索引：`INDEX(user_id, last_message_at)`、`INDEX(user_id, character_id, last_message_at)`。
+索引：`UNIQUE(user_id, character_id)`、`INDEX(user_id, last_message_at)`、`INDEX(user_id, character_id, last_message_at)`。
+
+规则：
+
+- 角色创建/复制时，服务端在同一事务内自动创建唯一会话；官方/存量角色在首次拉取会话列表时幂等补建；
+- `POST /conversations` 是幂等 ensure：已存在返回 200 + 原会话，新建返回 201；
+- 会话不允许删除；用户只能“清空聊天记录”，会话行保留以维持唯一约束；
+- 角色归档保留会话；角色彻底删除时才级联物理清理该会话。
 
 ### 2.5 messages
 
@@ -304,10 +313,11 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/conversations` | 当前用户会话分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor，`characterId` 可选筛选） |
-| POST | `/conversations` | 创建会话；`characterId` 不传用当前角色，必须为官方或本人所有且未归档 |
+| GET | `/conversations` | 当前用户会话分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor，`characterId` 可选筛选）；查询前为可见且 active 的角色幂等补建会话 |
+| POST | `/conversations` | 幂等 ensure：`characterId` 不传用当前角色；已存在 200 + 原会话，新建 201；title 已废弃；归档角色 409 |
 | GET | `/conversations/{id}` | 详情（校验归属） |
-| DELETE | `/conversations/{id}` | 删除（逻辑删除，异步物理删除可选） |
+| POST | `/conversations/{id}/clear` | 清空聊天记录：逻辑删除 messages/memories，保留会话行，重置 title/last_message_at；204 |
+| DELETE | `/conversations/{id}` | **不再允许**，返回 409 `CONVERSATION_DELETE_NOT_ALLOWED`；请使用 clear |
 | GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100；默认返回最新一页，`cursor` 为上一页 nextCursor，用于继续向更早翻页） |
 | POST | `/conversations/{id}/turns` | 创建轮次（文本输入），返回 turnId |
 | POST | `/conversations/{id}/turns/{turnId}/cancel` | 取消进行中的轮次（仅归属者；未知或已结束返回 404） |
@@ -315,6 +325,14 @@
 轮次状态与流式输出通过 WebSocket 下发（见第 4 节），不在 REST 中长轮询。
 
 `GET /conversations/{id}/messages` 默认返回**最新一页**，`items` 按时间升序返回（便于聊天界面自上而下渲染）；把 `nextCursor` 作为 `cursor` 传回即向更早的消息翻页。首次进入会话必须先看到最近的对话，历史只能靠翻页补齐。
+
+一对一会话规则：
+
+- `(user_id, character_id)` 唯一；并发 ensure 由数据库唯一键兜底，冲突后回查已有会话；
+- `POST /conversations` 重复调用不产生第二条，返回原 `conversationId`；
+- `PUT /preferences/active-character` 响应必须包含 `{activeCharacterId, conversationId}`；
+- 归档角色不允许 ensure 新会话（409 `CHARACTER_ARCHIVED`），但已有会话仍可读写；
+- 清空聊天记录后会话保留，`last_message_at` 为空，历史消息/记忆逻辑删除。
 
 ### 3.2.1 角色
 
@@ -328,7 +346,7 @@
 | POST | `/characters/{id}/archive` | 归档；若为当前角色，回退官方并返回新 `activeCharacterId` |
 | POST | `/characters/{id}/restore` | 恢复归档 |
 | POST | `/characters/{id}/purge` | 彻底删除；body `{confirmName}`，级联清理会话/消息/记忆/状态 |
-| PUT | `/preferences/active-character` | body `{characterId}`，切换当前角色 |
+| PUT | `/preferences/active-character` | body `{characterId}`，切换当前角色；返回 `{activeCharacterId, conversationId}` |
 
 规则：
 
@@ -337,6 +355,7 @@
 - 名字 2–12 字、同用户唯一、不能与官方角色重名；年龄 18–45；intro ≤40；补充设定 ≤60；
 - `PATCH` 版本不一致 409 `CHARACTER_VERSION_CONFLICT`；归档角色开新会话 409 `CHARACTER_ARCHIVED`；
 - 角色定义只接受结构化字段，不接受 systemPrompt / personaPrompt / rawConfig 等自由提示词；
+- 创建/复制角色时在同一事务内自动创建该角色的唯一会话；官方/存量角色在首次 `GET /conversations` 时幂等补建；
 - 官方角色列表始终返回；归档只过滤自定义角色；当前角色偏好失效或归档时读取回退官方。
 
 `CharacterView` 关键字段：
@@ -665,15 +684,15 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 
 ## 8. 数据删除矩阵
 
-| 存储 | 账号删除 | 自定义角色彻底删除 | 单条录像删除 | 单条记忆删除 | 单会话删除 |
+| 存储 | 账号删除 | 自定义角色彻底删除 | 单条录像删除 | 单条记忆删除 | 会话清空（不删除会话） |
 |---|---|---|---|---|---|
-| MySQL | 删除/匿名化用户相关行；自定义角色逻辑删除、user_preferences 物理删除 | 物理删除角色及该角色的 conversations/messages/memories/user_character_states；当前角色先回退官方 | 删除 recordings 行 | 删除 memories 行 | 级联 messages 等 |
+| MySQL | 删除/匿名化用户相关行；自定义角色逻辑删除、user_preferences 物理删除 | 物理删除角色及该角色的 conversations/messages/memories/user_character_states；当前角色先回退官方 | 删除 recordings 行 | 删除 memories 行 | 逻辑删除该会话 messages/memories；会话行保留，title/last_message_at 置空 |
 | Redis | 删除用户前缀 Key | 清理角色相关临时状态（如有） | 清理相关临时状态 | 清理召回缓存 | 清理会话状态 |
-| Milvus | 按 user_id 删除向量 | 删除该角色向量（P2 接入后） | 无 | 删除对应向量 | 删除关联记忆向量 |
-| 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 无（立绘本机） | 删除对象 | 无 | 可选删除关联录像 |
+| Milvus | 按 user_id 删除向量 | 删除该角色向量（P2 接入后） | 无 | 删除对应向量 | 删除该会话关联记忆向量（P2 接入后） |
+| 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 无（立绘本机） | 删除对象 | 无 | 无 |
 | 异步任务 | 取消/清理待执行任务 | 取消该角色整理任务 | 取消归档任务 | 无 | 取消整理任务 |
 | 本机 IndexedDB | 清理该用户全部立绘 | 清理该角色立绘 | 无 | 无 | 无 |
-| 日志/审计 | 保留最小删除审计 | 记录 character.purged（ID/名称/计数，不含正文） | 记录删除事件 | 记录删除事件 | 记录删除事件 |
+| 日志/审计 | 保留最小删除审计 | 记录 character.purged（ID/名称/计数，不含正文） | 记录删除事件 | 记录删除事件 | 记录 conversation.cleared（计数，不含正文） |
 
 每项必须有自动化验证；删除任务可重试且幂等，完成后写入 `data.deletion_completed` 事件。
 
@@ -694,7 +713,8 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 11. 每次成功的运营检索都存在 `admin.search.performed` 审计事件，字段完整；
 12. A 无法读取、修改或测试 B 的 LLM 配置，A 的“测试连接”只使用 A 的有效配置；
 13. A 无法读取/修改/删除 B 的自定义角色，A 无法用 B 的 characterId 创建会话或查询关系状态；
-14. 归档角色不出现在切换器/新建会话中，但已有会话仍可继续；彻底删除角色后会话、消息、记忆、状态与本机立绘无残留。
+14. 归档角色不出现在切换器/新建会话中，但已有会话仍可继续；彻底删除角色后会话、消息、记忆、状态与本机立绘无残留；
+15. 每个 `(user_id, character_id)` 最多一条会话：重复/并发 `POST /conversations` 只产生一条，`DELETE /conversations/{id}` 返回 409，清空聊天记录后会话仍存在。
 
 ## 10. 隐私分级
 

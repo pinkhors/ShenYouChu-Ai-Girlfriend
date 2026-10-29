@@ -5527,3 +5527,38 @@ select {
   align-items: center;
   gap: 8px;
 }
+
+/* ---------- 会话清空入口（每角色一个会话，删除改为清空） ---------- */
+
+.conversation__clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #f7f7f7;
+  color: #999;
+  opacity: 0;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.conversation:hover .conversation__clear,
+.conversation__clear:focus-visible {
+  opacity: 1;
+}
+
+.conversation__clear:hover {
+  background: #fff;
+  color: var(--danger);
+}
+
+.conversation__clear:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

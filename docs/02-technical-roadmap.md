@@ -169,6 +169,7 @@ idle → listening → transcribing → retrieving → generating → speaking �
 - 时间统一 UTC 存储（`DATETIME(3)`），前端本地展示；
 - 归属字段 `user_id` 不可为空（系统模板表除外），查询必须带归属条件；
 - 角色：`characters.owner_user_id IS NULL` 为官方模板（人设只读）；非空为自定义角色，`is_public=false`；`user_preferences.active_character_id` 保存当前角色；会话、记忆、关系状态、立绘都按角色隔离；
+- 会话：`conversations` 对 `(user_id, character_id)` 唯一；角色创建/复制自动建，官方/存量角色首次列表幂等补建；会话不可删除，只清空聊天记录。
 - 逻辑删除用于常规业务隐藏；用户主动"清除"走 `deletion_jobs` 物理级联删除；角色"彻底删除"物理清理该角色的会话/消息/记忆/状态；
 - 审计字段由应用写入，保证时区与可测试性一致。
 

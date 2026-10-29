@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import {
   API_BASE,
   ApiError,
-  createConversation,
+  clearConversation,
   deleteAccount,
-  deleteConversation,
   getCharacterState,
   listConversations,
   login,
@@ -32,7 +31,7 @@ import {
 } from './character/characterTypes'
 import { useCharacters } from './character/useCharacters'
 import { usePortraitAssets } from './character/usePortraitAssets'
-import { clearPendingMessages } from './chat/pendingStore'
+import { resetTurnSessions, subscribeSettledTurns } from './chat/turnSessions'
 import ChatView from './ChatView'
 import ConversationSidebar from './ConversationSidebar'
 import MemoryPanel from './MemoryPanel'
@@ -111,11 +110,13 @@ function avatarOf(character: CharacterView | null, officialOverride: AvatarConfi
 function EmptyChat({
   character,
   portraits,
-  onCreate
+  onEnter,
+  isEntering
 }: {
   readonly character: CharacterView
   readonly portraits: PortraitSet | null
-  readonly onCreate: () => void
+  readonly onEnter: () => void
+  readonly isEntering: boolean
 }) {
   return (
     <section className="empty-chat">
@@ -129,12 +130,17 @@ function EmptyChat({
       <h1 className="empty-chat__title">{character.displayName}在这里</h1>
       <p className="muted">
         {character.intro === ''
-          ? '从左侧选择一个会话，或者开始一次新的聊天。'
+          ? '每个角色只有一个会话，点下面进入你和她的聊天。'
           : character.intro}
       </p>
-      <button className="btn btn--primary" type="button" onClick={onCreate}>
-        <Icon name="plus" size={16} />
-        新建会话
+      <button
+        className="btn btn--primary"
+        type="button"
+        disabled={isEntering}
+        onClick={onEnter}
+      >
+        <Icon name="chat" size={16} />
+        {isEntering ? '正在准备会话…' : '进入会话'}
       </button>
     </section>
   )
@@ -152,7 +158,7 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversationError, setConversationError] = useState<string | null>(null)
   const [isLoadingConversations, setIsLoadingConversations] = useState(false)
-  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null)
+  const [clearingConversationId, setClearingConversationId] = useState<string | null>(null)
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [characterState, setCharacterState] = useState<CharacterState | null>(null)
   const [officialAvatar, setOfficialAvatar] = useState<AvatarConfig | null>(null)
@@ -207,7 +213,7 @@ export default function App() {
   useEffect(() => {
     setOnUnauthorized(() => {
       tokenStore.clear()
-      clearPendingMessages()
+      resetTurnSessions()
       setUser(null)
       setConversations([])
       setActiveConversation(null)
@@ -287,7 +293,7 @@ export default function App() {
           return
         }
         tokenStore.clear()
-        clearPendingMessages()
+        resetTurnSessions()
         setUser(null)
         setAuth({
           ...INITIAL_AUTH_STATE,
@@ -305,14 +311,20 @@ export default function App() {
     }
   }, [])
 
-  const refreshConversations = useCallback(async (): Promise<void> => {
+  /**
+   * 刷新会话列表并返回最新结果（失败返回空数组，同时保留错误提示）。
+   * 角色切换 / 角色创建后需要立即拿到后端 ensure 的唯一会话，因此返回值是必要的。
+   */
+  const refreshConversations = useCallback(async (): Promise<Conversation[]> => {
     setIsLoadingConversations(true)
     setConversationError(null)
     try {
       const page = await listConversations()
       setConversations(page.items)
+      return page.items
     } catch (error) {
       setConversationError(describeError(error, '会话列表加载失败'))
+      return []
     } finally {
       setIsLoadingConversations(false)
     }
@@ -328,18 +340,18 @@ export default function App() {
   }, [user, refreshConversations])
 
   /**
-   * 会话被切走期间完成的轮次：刷新会话列表里的最近消息时间；
-   * 如果用户正停在该会话，就强制重新加载消息，让刚落库的回复出现。
+   * 回合结束（完成 / 失败 / 用户停止）时：刷新会话列表里的最近消息时间；
+   * 如果用户正停在该会话，就 bump chatVersion 强制重新加载消息，让已落库的回复出现。
+   * activeConversationIdRef 避免订阅回调拿到过期的会话 id。
    */
-  const handleTurnSettled = useCallback(
-    (conversationId: string): void => {
+  useEffect(() => {
+    return subscribeSettledTurns((conversationId) => {
       void refreshConversations()
       if (activeConversationIdRef.current === conversationId) {
         setChatVersion((previous) => previous + 1)
       }
-    },
-    [refreshConversations]
-  )
+    })
+  }, [refreshConversations])
 
   /* 首次进入自动选中当前角色最近的会话；当前会话被删除时回到空态。切换动作由显式 handler 负责 */
   useEffect(() => {
@@ -420,7 +432,7 @@ export default function App() {
       console.warn('[desktop] 退出登录请求失败：', describeError(error, '未知错误'))
     } finally {
       tokenStore.clear()
-      clearPendingMessages()
+      resetTurnSessions()
       setUser(null)
       setConversations([])
       setActiveConversation(null)
@@ -459,7 +471,7 @@ export default function App() {
       )
     }
     tokenStore.clear()
-    clearPendingMessages()
+    resetTurnSessions()
     setUser(null)
     setConversations([])
     setCharacterState(null)
@@ -469,31 +481,6 @@ export default function App() {
     setEditor(null)
     setSection('chats')
     setAuth({ ...INITIAL_AUTH_STATE, errorMessage: '账号已删除，感谢你的陪伴' })
-  }
-
-  const handleCreateConversation = async (
-    title: string,
-    characterId?: string
-  ): Promise<boolean> => {
-    setConversationError(null)
-    const targetId = characterId ?? characters.activeId ?? undefined
-    try {
-      const created = await createConversation({
-        ...(title === '' ? {} : { title }),
-        ...(targetId === undefined ? {} : { characterId: targetId })
-      })
-      /* 新会话置顶，避免用户创建后还要滚动查找 */
-      setConversations((previous) => [created, ...previous])
-      setActiveConversation(created)
-      if (characters.activeId !== created.characterId) {
-        await characters.activate(created.characterId)
-      }
-      setSection('chats')
-      return true
-    } catch (error) {
-      setConversationError(describeError(error, '创建会话失败'))
-      return false
-    }
   }
 
   const handleSelectConversation = useCallback(
@@ -509,24 +496,34 @@ export default function App() {
     [characters]
   )
 
-  const handleDeleteConversation = async (conversation: Conversation): Promise<void> => {
-    const displayName = conversation.title ?? '未命名会话'
-    if (!window.confirm(`确认删除会话「${displayName}」？该操作不可撤销。`)) {
+  /**
+   * 会话不再允许删除：改为清空消息与记忆，会话本身保留。
+   * 清空后刷新列表；若清空的正是当前会话，bump chatVersion 让消息区立即变为空态。
+   */
+  const handleClearConversation = async (conversation: Conversation): Promise<void> => {
+    const displayName =
+      displayCharacters.find((character) => character.id === conversation.characterId)
+        ?.displayName ??
+      conversation.title ??
+      '她'
+    if (
+      !window.confirm(`清空与 ${displayName} 的聊天记录？会话保留，消息和记忆会删除，无法恢复。`)
+    ) {
       return
     }
 
-    setDeletingConversationId(conversation.id)
+    setClearingConversationId(conversation.id)
     setConversationError(null)
     try {
-      await deleteConversation(conversation.id)
-      setConversations((previous) => previous.filter((item) => item.id !== conversation.id))
-      if (activeConversation?.id === conversation.id) {
-        setActiveConversation(null)
+      await clearConversation(conversation.id)
+      await refreshConversations()
+      if (activeConversationIdRef.current === conversation.id) {
+        setChatVersion((previous) => previous + 1)
       }
     } catch (error) {
-      setConversationError(describeError(error, '删除会话失败'))
+      setConversationError(describeError(error, '清空聊天记录失败'))
     } finally {
-      setDeletingConversationId(null)
+      setClearingConversationId(null)
     }
   }
 
@@ -538,9 +535,16 @@ export default function App() {
       }
       setCharacterPageError(null)
       try {
-        await characters.activate(id)
+        /* 后端在切换角色时 ensure 该角色的唯一会话，并回传其 id */
+        const result = await characters.activate(id)
+        const items = await refreshConversations()
         const target =
-          conversations.find((conversation) => conversation.characterId === id) ?? null
+          items.find((conversation) => conversation.id === result.conversationId) ??
+          items.find(
+            (conversation) =>
+              conversation.characterId === (result.activeCharacterId ?? id)
+          ) ??
+          null
         setActiveConversation(target)
         setSection('chats')
       } catch (error) {
@@ -551,7 +555,7 @@ export default function App() {
         }
       }
     },
-    [characters, conversations, editor, section]
+    [characters, editor, section, refreshConversations]
   )
 
   const handleCloseEditor = (): void => {
@@ -579,7 +583,12 @@ export default function App() {
   const handleCreateCharacter = async (draft: CharacterDraft): Promise<CharacterView | null> => {
     setCharacterPageError(null)
     /* 让编辑器捕获 ApiError 并显示后端的具体错误（重名/超限/选项非法等）。 */
-    return characters.create(draft)
+    const created = await characters.create(draft)
+    /* 后端在创建角色时自动建好唯一会话，这里刷新让它可以立即被选中 */
+    if (created !== null) {
+      await refreshConversations()
+    }
+    return created
   }
 
   const handleUpdateCharacter = async (
@@ -614,6 +623,8 @@ export default function App() {
         avatarOverride ?? (source.isOfficial ? avatarOf(source, officialAvatar) : undefined)
       )
       if (copied !== null) {
+        /* 复制角色同样由后端自动建会话，刷新列表让新会话可见 */
+        await refreshConversations()
         setEditor({
           mode: 'edit',
           initialDraft: characterToDraft(copied),
@@ -838,7 +849,7 @@ export default function App() {
             activeId={activeConversation?.id ?? null}
             isLoading={isLoadingConversations}
             error={conversationError}
-            deletingId={deletingConversationId}
+            clearingId={clearingConversationId}
             characters={displayCharacters}
             activeCharacterId={characters.activeId}
             onSwitchCharacter={(id) => {
@@ -848,9 +859,8 @@ export default function App() {
               setSection('characters')
             }}
             onSelect={handleSelectConversation}
-            onCreate={handleCreateConversation}
-            onDelete={(conversation) => {
-              void handleDeleteConversation(conversation)
+            onClear={(conversation) => {
+              void handleClearConversation(conversation)
             }}
             onRefresh={() => {
               void refreshConversations()
@@ -885,15 +895,16 @@ export default function App() {
                 onCall={() => {
                   setCallOpen(true)
                 }}
-                onTurnSettled={handleTurnSettled}
                 reloadToken={chatVersion}
               />
             ) : activeCharacter !== null ? (
               <EmptyChat
                 character={activeCharacter}
                 portraits={portraitAssets.portraits}
-                onCreate={() => {
-                  void handleCreateConversation('')
+                isEntering={isLoadingConversations}
+                onEnter={() => {
+                  /* 会话由后端 ensure，这里只切换角色并打开其唯一会话 */
+                  void handleSwitchCharacter(activeCharacter.id, true)
                 }}
               />
             ) : (

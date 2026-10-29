@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState } from 'react'
 import type { Conversation } from './api/client'
 import { DEFAULT_AVATAR } from './avatar/avatarConfig'
 import type { CharacterView } from './character/characterTypes'
@@ -12,50 +12,54 @@ interface ConversationSidebarProps {
   readonly activeId: string | null
   readonly isLoading: boolean
   readonly error: string | null
-  readonly deletingId: string | null
+  /** 正在清空聊天记录的会话 id */
+  readonly clearingId: string | null
   readonly characters: readonly CharacterView[]
   readonly activeCharacterId: string | null
   readonly onSwitchCharacter: (id: string) => void
   readonly onManageCharacters: () => void
   readonly onSelect: (conversation: Conversation) => void
-  readonly onCreate: (title: string, characterId: string) => Promise<boolean>
-  readonly onDelete: (conversation: Conversation) => void
+  readonly onClear: (conversation: Conversation) => void
   readonly onRefresh: () => void
 }
 
 type Scope = 'active' | 'all'
 
-/** 会话列表栏：搜索、新建、切换与删除，对应微信的“聊天”列表。 */
+/**
+ * 会话列表栏：搜索、切换、清空，对应微信的“聊天”列表。
+ * 每个角色只有后端 ensure 的唯一会话，因此这里没有“新建会话”入口。
+ */
 export default function ConversationSidebar({
   conversations,
   activeId,
   isLoading,
   error,
-  deletingId,
+  clearingId,
   characters,
   activeCharacterId,
   onSwitchCharacter,
   onManageCharacters,
   onSelect,
-  onCreate,
-  onDelete,
+  onClear,
   onRefresh
 }: ConversationSidebarProps) {
   const [search, setSearch] = useState('')
   const [scope, setScope] = useState<Scope>('active')
-  const [isCreating, setIsCreating] = useState(false)
-  const [title, setTitle] = useState('')
-  const [createCharacterId, setCreateCharacterId] = useState(activeCharacterId ?? '')
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const activeCharacters = useMemo(
-    () => characters.filter((character) => character.status === 'active'),
-    [characters]
-  )
+  const characterOf = (characterId: string): CharacterView | undefined =>
+    characters.find((character) => character.id === characterId)
 
-  useEffect(() => {
-    setCreateCharacterId(activeCharacterId ?? '')
-  }, [activeCharacterId])
+  const characterNames = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const character of characters) {
+      names.set(character.id, character.displayName)
+    }
+    return names
+  }, [characters])
+
+  /** 会话标题回退到角色名：一个角色只有一个会话，标题因此可推导 */
+  const titleOf = (conversation: Conversation): string =>
+    conversation.title ?? `和${characterNames.get(conversation.characterId) ?? '她'}的会话`
 
   const filtered = useMemo(() => {
     const byScope =
@@ -67,32 +71,11 @@ export default function ConversationSidebar({
       return byScope
     }
     return byScope.filter((conversation) =>
-      (conversation.title ?? '未命名会话').toLowerCase().includes(keyword)
+      (conversation.title ?? `和${characterNames.get(conversation.characterId) ?? '她'}的会话`)
+        .toLowerCase()
+        .includes(keyword)
     )
-  }, [conversations, search, scope, activeCharacterId])
-
-  const characterOf = (characterId: string): CharacterView | undefined =>
-    characters.find((character) => character.id === characterId)
-
-  const selectedCreateCharacterId =
-    createCharacterId !== '' ? createCharacterId : activeCharacters[0]?.id ?? ''
-
-  const handleCreate = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    if (isSubmitting) {
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      const created = await onCreate(title.trim(), selectedCreateCharacterId)
-      if (created) {
-        setTitle('')
-        setIsCreating(false)
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  }, [conversations, search, scope, activeCharacterId, characterNames])
 
   return (
     <aside className="sidebar" aria-label="会话列表">
@@ -108,17 +91,6 @@ export default function ConversationSidebar({
           />
         </div>
         <div className="sidebar__actions">
-          <button
-            className="icon-btn"
-            type="button"
-            title={isCreating ? '取消新建' : '新建会话'}
-            aria-label={isCreating ? '取消新建' : '新建会话'}
-            onClick={() => {
-              setIsCreating((previous) => !previous)
-            }}
-          >
-            <Icon name={isCreating ? 'close' : 'plus'} size={18} />
-          </button>
           <button
             className="icon-btn"
             type="button"
@@ -168,40 +140,6 @@ export default function ConversationSidebar({
         />
       </div>
 
-      {isCreating && (
-        <form className="creator" onSubmit={(event) => void handleCreate(event)}>
-          {activeCharacters.length > 0 && (
-            <label className="creator__character">
-              <span>和谁聊</span>
-              <select
-                value={selectedCreateCharacterId}
-                disabled={isSubmitting}
-                onChange={(event) => setCreateCharacterId(event.target.value)}
-              >
-                {activeCharacters.map((character) => (
-                  <option key={character.id} value={character.id}>
-                    {character.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <input
-            className="creator__input"
-            type="text"
-            placeholder="会话标题（可留空）"
-            maxLength={200}
-            autoFocus
-            value={title}
-            disabled={isSubmitting}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-          <button className="btn btn--primary btn--sm" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '创建中…' : '创建'}
-          </button>
-        </form>
-      )}
-
       {error !== null && (
         <p className="sidebar__error" role="alert">
           {error}
@@ -214,6 +152,7 @@ export default function ConversationSidebar({
           const character = characterOf(conversation.characterId)
           const characterName = character?.displayName ?? '未知角色'
           const avatarConfig = character?.avatarConfig ?? DEFAULT_AVATAR
+          const isClearing = clearingId === conversation.id
           return (
             <li key={conversation.id}>
               <div className={isActive ? 'conversation conversation--active' : 'conversation'}>
@@ -231,7 +170,7 @@ export default function ConversationSidebar({
                     />
                   </span>
                   <span className="conversation__text">
-                    <span className="conversation__title">{conversation.title ?? '未命名会话'}</span>
+                    <span className="conversation__title">{titleOf(conversation)}</span>
                     <span className="conversation__preview">
                       {characterName} · {conversation.lastMessageAt === null ? '还没有消息' : '最近有回复'}
                     </span>
@@ -244,12 +183,12 @@ export default function ConversationSidebar({
                   </span>
                 </button>
                 <button
-                  className="conversation__delete"
+                  className="conversation__clear"
                   type="button"
-                  title="删除会话"
-                  aria-label={`删除会话 ${conversation.title ?? '未命名会话'}`}
-                  disabled={deletingId === conversation.id}
-                  onClick={() => onDelete(conversation)}
+                  title={isClearing ? '正在清空…' : '清空聊天记录'}
+                  aria-label={`清空与 ${characterName} 的聊天记录`}
+                  disabled={isClearing}
+                  onClick={() => onClear(conversation)}
                 >
                   <Icon name="trash" size={15} />
                 </button>
@@ -263,9 +202,9 @@ export default function ConversationSidebar({
       {!isLoading && filtered.length === 0 && (
         <p className="sidebar__empty">
           {conversations.length === 0
-            ? '还没有会话，点右上角 + 新建一个。'
+            ? '正在准备你和她的会话…'
             : scope === 'active'
-              ? '当前角色还没有会话，点右上角 + 新建一个。'
+              ? '当前角色还没有会话，切换角色会自动准备会话。'
               : `没有匹配「${search.trim()}」的会话。`}
         </p>
       )}
