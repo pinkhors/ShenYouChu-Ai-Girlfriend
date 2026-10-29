@@ -653,6 +653,37 @@ select {
   font-size: 10px;
 }
 
+.conversation__current {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eefaf2;
+  color: #3b9b66;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sidebar__list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px 4px;
+  color: #8d8d8d;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sidebar__list-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  color: #9a9a9a;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+
 .conversation__delete {
   position: absolute;
   top: 50%;

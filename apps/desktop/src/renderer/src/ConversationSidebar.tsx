@@ -25,11 +25,9 @@ interface ConversationSidebarProps {
   readonly onRefresh: () => void
 }
 
-type Scope = 'active' | 'all'
-
 /**
  * 会话列表栏：搜索、切换、清空，对应微信的“聊天”列表。
- * 每个角色只有后端 ensure 的唯一会话，因此这里没有“新建会话”入口。
+ * 每个角色只有后端 ensure 的唯一会话；默认展示全部女友，点击一行即可切换。
  */
 export default function ConversationSidebar({
   conversations,
@@ -47,7 +45,6 @@ export default function ConversationSidebar({
   onRefresh
 }: ConversationSidebarProps) {
   const [search, setSearch] = useState('')
-  const [scope, setScope] = useState<Scope>('active')
 
   const characterOf = (characterId: string): CharacterView | undefined =>
     characters.find((character) => character.id === characterId)
@@ -60,25 +57,29 @@ export default function ConversationSidebar({
     return names
   }, [characters])
 
-  /** 会话标题回退到角色名：一个角色只有一个会话，标题因此可推导 */
+  /** 一个角色只有一个会话，行标题直接使用角色名，增强“在和她聊天”的代入感。 */
   const titleOf = (conversation: Conversation): string =>
-    conversation.title ?? `和${characterNames.get(conversation.characterId) ?? '她'}的会话`
+    characterNames.get(conversation.characterId) ?? '未知角色'
+
+  const ordered = useMemo(
+    () =>
+      [...conversations].sort((left, right) => {
+        const leftTime = new Date(left.lastMessageAt ?? left.createdAt).getTime()
+        const rightTime = new Date(right.lastMessageAt ?? right.createdAt).getTime()
+        return rightTime - leftTime
+      }),
+    [conversations]
+  )
 
   const filtered = useMemo(() => {
-    const byScope =
-      scope === 'active' && activeCharacterId !== null
-        ? conversations.filter((conversation) => conversation.characterId === activeCharacterId)
-        : conversations
     const keyword = search.trim().toLowerCase()
     if (keyword === '') {
-      return byScope
+      return ordered
     }
-    return byScope.filter((conversation) =>
-      (conversation.title ?? `和${characterNames.get(conversation.characterId) ?? '她'}的会话`)
-        .toLowerCase()
-        .includes(keyword)
+    return ordered.filter((conversation) =>
+      titleOf(conversation).toLowerCase().includes(keyword)
     )
-  }, [conversations, search, scope, activeCharacterId, characterNames])
+  }, [ordered, search, characterNames])
 
   return (
     <aside className="sidebar" aria-label="会话列表">
@@ -108,40 +109,20 @@ export default function ConversationSidebar({
         </div>
       </header>
 
-      <div className="sidebar__scope" role="tablist" aria-label="会话范围">
-        <button
-          className={scope === 'active' ? 'sidebar__scope-item sidebar__scope-item--active' : 'sidebar__scope-item'}
-          type="button"
-          role="tab"
-          aria-selected={scope === 'active'}
-          onClick={() => {
-            setScope('active')
-          }}
-        >
-          当前角色
-        </button>
-        <button
-          className={scope === 'all' ? 'sidebar__scope-item sidebar__scope-item--active' : 'sidebar__scope-item'}
-          type="button"
-          role="tab"
-          aria-selected={scope === 'all'}
-          onClick={() => {
-            setScope('all')
-          }}
-        >
-          全部
-        </button>
-      </div>
-
       <div className="sidebar__search">
         <Icon name="search" size={16} className="sidebar__search-icon" />
         <input
           className="sidebar__search-input"
           type="search"
-          placeholder="搜索会话"
+          placeholder="搜索女友"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+      </div>
+
+      <div className="sidebar__list-heading">
+        <span>{search.trim() === '' ? '全部女友' : '搜索结果'}</span>
+        <span className="sidebar__list-count">{filtered.length}</span>
       </div>
 
       {error !== null && (
@@ -153,8 +134,9 @@ export default function ConversationSidebar({
       <ul className="conversation-list">
         {filtered.map((conversation) => {
           const isActive = conversation.id === activeId
+          const isCurrentCharacter = conversation.characterId === activeCharacterId
           const character = characterOf(conversation.characterId)
-          const characterName = character?.displayName ?? '未知角色'
+          const characterName = character?.displayName ?? titleOf(conversation)
           const avatarConfig = character?.avatarConfig ?? DEFAULT_AVATAR
           const isClearing = clearingId === conversation.id
           return (
@@ -163,6 +145,7 @@ export default function ConversationSidebar({
                 <button
                   className="conversation__main"
                   type="button"
+                  aria-current={isActive ? 'true' : undefined}
                   onClick={() => onSelect(conversation)}
                 >
                   <span className="conversation__avatar">
@@ -176,14 +159,14 @@ export default function ConversationSidebar({
                   <span className="conversation__text">
                     <span className="conversation__title">{titleOf(conversation)}</span>
                     <span className="conversation__preview">
-                      {characterName} · {conversation.lastMessageAt === null ? '还没有消息' : '最近有回复'}
+                      {conversation.lastMessageAt === null ? '还没有消息' : '最近有回复'}
                     </span>
                   </span>
                   <span className="conversation__meta">
                     <span className="conversation__time">
                       {formatListTime(conversation.lastMessageAt ?? conversation.createdAt)}
                     </span>
-                    <span className="conversation__status">{conversation.status}</span>
+                    {isCurrentCharacter && <span className="conversation__current">当前</span>}
                   </span>
                 </button>
                 <button
@@ -207,9 +190,7 @@ export default function ConversationSidebar({
         <p className="sidebar__empty">
           {conversations.length === 0
             ? '正在准备你和她的会话…'
-            : scope === 'active'
-              ? '当前角色还没有会话，切换角色会自动准备会话。'
-              : `没有匹配「${search.trim()}」的会话。`}
+            : `没有匹配「${search.trim()}」的女友。`}
         </p>
       )}
     </aside>

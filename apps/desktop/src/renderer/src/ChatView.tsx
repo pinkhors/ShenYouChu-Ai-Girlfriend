@@ -227,7 +227,7 @@ export default function ChatView({
   const heroSource = heroImage ?? resolvePortrait(portraits, 'neutral')
 
   return (
-    <section className="chat chat--rose" aria-label={`和${character.displayName}的会话`}>
+    <section className="chat chat--rose" aria-label={`${character.displayName}的会话`}>
       <header className="chat__topbar">
         <div className="chat__brand">
           <span className="chat__heart" aria-hidden="true">
@@ -288,7 +288,7 @@ export default function ChatView({
         )}
         <div className="chat__hero-caption">
           <strong>{character.displayName}</strong>
-          <span>{conversation.title ?? `和${character.displayName}的会话`}</span>
+          <span>{character.isOfficial ? '官方角色' : '我的角色'}</span>
         </div>
         <button className="chat__hero-call" type="button" onClick={onCall}>
           <Icon name="mic" size={18} />

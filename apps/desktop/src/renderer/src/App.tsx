@@ -514,9 +514,7 @@ export default function App() {
   const handleClearConversation = async (conversation: Conversation): Promise<void> => {
     const displayName =
       displayCharacters.find((character) => character.id === conversation.characterId)
-        ?.displayName ??
-      conversation.title ??
-      '她'
+        ?.displayName ?? '她'
     if (
       !window.confirm(`清空与 ${displayName} 的聊天记录？会话保留，消息和记忆会删除，无法恢复。`)
     ) {
