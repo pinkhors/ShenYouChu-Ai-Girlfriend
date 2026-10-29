@@ -355,7 +355,8 @@ shenyouchu:
 - 对话接入：`TurnService` 在消息事务提交后写 chunk 并增量刷新快照，失败只记日志；清空聊天记录会同步清理 chunk/边/快照；账号删除通过 `MemoryGraphAccountPurgePort` 清理；
 - v1.1：`memorygraph/retrieval` 提供 `MemoryContext` + `MemoryRecallService`（chunk 向量召回、五类配额、关键词降级、召回日志、300ms 预算）；`TurnService` 已接入该召回结果；`memorygraph/backfill` 提供历史消息回填端点；
 - 前端：`MemoryPanel` 增加「列表 / 星链」切换，`memorygraph/MemoryGraphPanel.tsx` + `.css` 渲染星座/星球/边、详情、遗忘、重建、滚轮缩放；
-- 测试：`GraphProjectorTest`、`MemorySignalsTest`、`MemoryRecallScoringTest`（16）、`BackfillGroupingTest`（7）、`TurnContextAssemblerMemoryTest`（4）。
+- 测试：`GraphProjectorTest`、`MemorySignalsTest`、`MemoryRecallScoringTest`（16）、`BackfillGroupingTest`（7）、`TurnContextAssemblerMemoryTest`（4）；
+- 验证：`mvn ... package` 通过；上述 27+ 用例通过（`-DforkCount=0` 规避沙箱 surefire 管道限制）；48081 启动后 `/actuator/health=UP`。
 
 已知偏差（按 P1 范围）：
 
