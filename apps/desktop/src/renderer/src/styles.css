@@ -5521,3 +5521,9 @@ select {
   color: #a24c60;
   font-weight: 600;
 }
+
+.character-appearance__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -3,6 +3,7 @@ import {
   ACCESSORIES,
   AVATAR_PRESETS,
   BROW_STYLES,
+  DEFAULT_AVATAR,
   EYE_COLORS,
   HAIR_COLORS,
   HAIR_STYLES,
@@ -11,6 +12,7 @@ import {
   OUTFIT_STYLES,
   SKIN_TONES,
   isSameAvatar,
+  randomizeAvatar,
   type AvatarConfig,
   type HairStyleId
 } from '../avatar/avatarConfig'
@@ -213,7 +215,29 @@ export default function AppearancePanel({
             左侧预览实时跟随。没有导入立绘时，聊天与角色卡使用这套矢量形象。
           </p>
         </div>
-        <span className="character-appearance__badge">仅应用外观</span>
+        <div className="character-appearance__actions">
+          <span className="character-appearance__badge">仅应用外观</span>
+          <button
+            className="btn btn--ghost btn--sm"
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              onChange(randomizeAvatar())
+            }}
+          >
+            随机
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              onChange(DEFAULT_AVATAR)
+            }}
+          >
+            恢复默认
+          </button>
+        </div>
       </header>
 
       <section className="character-appearance__presets" aria-labelledby="character-appearance-preset-title">
