@@ -970,7 +970,7 @@ export default function App() {
               activeCharacterId={characters.activeId}
             />
           ) : section === 'activity' ? (
-            <ActivityPanel />
+            <ActivityPanel characters={displayCharacters} conversations={conversations} />
           ) : (
             <SettingsPanel
               user={user}

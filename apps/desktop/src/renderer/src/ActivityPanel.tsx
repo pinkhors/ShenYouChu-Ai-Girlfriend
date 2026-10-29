@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
-import { ApiError, listActivityEvents, type ActivityEventView } from './api/client'
+import {
+  ApiError,
+  listActivityEvents,
+  type ActivityEventView,
+  type Conversation
+} from './api/client'
+import type { CharacterView } from './character/characterTypes'
 import Icon from './ui/Icon'
 import { formatTime } from './ui/time'
 
@@ -19,8 +25,30 @@ function toMessage(error: unknown): string {
   return error instanceof Error ? error.message : '请求失败，请稍后重试'
 }
 
-/** 活动记录页：只读时间线，支持按类型筛选。 */
-export default function ActivityPanel() {
+/** 活动记录页：只读时间线，支持按类型筛选；事件尽量标出所属角色。 */
+interface ActivityPanelProps {
+  readonly characters: readonly CharacterView[]
+  readonly conversations: readonly Conversation[]
+}
+
+function payloadCharacterId(event: ActivityEventView): string | null {
+  if (event.payload === null) {
+    return null
+  }
+  try {
+    const parsed: unknown = JSON.parse(event.payload)
+    if (typeof parsed !== 'object' || parsed === null) {
+      return null
+    }
+    const record = parsed as Record<string, unknown>
+    const value = record.characterId ?? record.character_id
+    return typeof value === 'string' ? value : null
+  } catch {
+    return null
+  }
+}
+
+export default function ActivityPanel({ characters, conversations }: ActivityPanelProps) {
   const [events, setEvents] = useState<ActivityEventView[]>([])
   const [type, setType] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +72,20 @@ export default function ActivityPanel() {
 
   const handleTypeChange = (event: ChangeEvent<HTMLSelectElement>): void => {
     setType(event.target.value)
+  }
+
+  const characterNameOf = (event: ActivityEventView): string | null => {
+    const fromPayload = payloadCharacterId(event)
+    const fromConversation =
+      event.conversationId === null
+        ? null
+        : conversations.find((conversation) => conversation.id === event.conversationId)?.characterId ??
+          null
+    const characterId = fromPayload ?? fromConversation
+    if (characterId === null) {
+      return null
+    }
+    return characters.find((character) => character.id === characterId)?.displayName ?? null
   }
 
   return (
@@ -82,7 +124,12 @@ export default function ActivityPanel() {
             <li className="timeline__item" key={event.id}>
               <span className="timeline__dot" aria-hidden="true" />
               <div className="timeline__body">
-                <p className="timeline__title">{event.eventType}</p>
+                <p className="timeline__title">
+                  {characterNameOf(event) !== null && (
+                    <span className="memory-character">{characterNameOf(event)} · </span>
+                  )}
+                  {event.eventType}
+                </p>
                 <p className="timeline__meta">
                   {event.actor} · {event.source} · {formatTime(event.occurredAt)}
                 </p>
