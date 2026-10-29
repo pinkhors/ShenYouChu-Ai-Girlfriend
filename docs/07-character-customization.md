@@ -1008,6 +1008,6 @@ POST /conversations/{id}/turns/stream
 - 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。
 - 存储：官方角色矢量形象保留本机覆盖；自定义角色形象随账号；立绘/聊天主视觉 key 改为 `userId:characterId`，旧 `userId` 立绘在官方角色首次读取时迁移。
 - 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 32 项通过（V4 history=4，CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 84 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
-- 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘。
+- 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘、角色卡/切换器的立绘预览（当前用矢量头像，避免一次加载多套 IndexedDB 立绘；聊天/通话/编辑器仍优先立绘）。
 - 未实现（P2）：每个角色独立音色/语速、关系起点、角色卡导出/导入、Live2D、更多外观资产。
 - 未在本沙箱验证：Electron 窗口视觉回归、IndexedDB 迁移的真实浏览器冒烟；Mockito 测试受沙箱 `MockMaker` 限制，需本机复跑。
