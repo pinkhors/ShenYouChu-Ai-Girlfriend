@@ -5670,3 +5670,42 @@ select {
   color: #a07c84;
   font-size: 12px;
 }
+
+/* ---------- 记忆：列表 / 星链切换 ---------- */
+
+.memory-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.memory-view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fafafa;
+}
+
+.memory-view-toggle__item {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.memory-view-toggle__item:hover {
+  color: var(--text);
+}
+
+.memory-view-toggle__item--active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}

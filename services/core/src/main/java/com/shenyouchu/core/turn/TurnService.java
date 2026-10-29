@@ -6,6 +6,7 @@ import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.MemoryService;
+import com.shenyouchu.core.memorygraph.MemoryChunkService;
 import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.dto.MessagePage;
 import com.shenyouchu.core.message.dto.MessageView;
@@ -14,6 +15,8 @@ import com.shenyouchu.core.persona.PersonaService;
 import com.shenyouchu.core.relationship.RelationshipService;
 import com.shenyouchu.core.relationship.dto.CharacterStateView;
 import com.shenyouchu.core.turn.dto.TurnResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,12 +32,15 @@ import java.util.UUID;
 @Service
 public class TurnService {
 
+    private static final Logger log = LoggerFactory.getLogger(TurnService.class);
+
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final PersonaService personaService;
     private final ReplyGenerator replyGenerator;
     private final ActivityService activityService;
     private final MemoryService memoryService;
+    private final MemoryChunkService memoryChunkService;
     private final RelationshipService relationshipService;
     private final TransactionTemplate transactionTemplate;
 
@@ -44,6 +50,7 @@ public class TurnService {
                        ReplyGenerator replyGenerator,
                        ActivityService activityService,
                        MemoryService memoryService,
+                       MemoryChunkService memoryChunkService,
                        RelationshipService relationshipService,
                        PlatformTransactionManager transactionManager) {
         this.conversationMapper = conversationMapper;
@@ -52,6 +59,7 @@ public class TurnService {
         this.replyGenerator = replyGenerator;
         this.activityService = activityService;
         this.memoryService = memoryService;
+        this.memoryChunkService = memoryChunkService;
         this.relationshipService = relationshipService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
@@ -71,6 +79,14 @@ public class TurnService {
                 persistTurn(conversation, userId, text, turnId, reply));
         if (response == null) {
             throw new IllegalStateException("事务未返回轮次结果");
+        }
+        /* 记忆写入与星图刷新是旁路：失败只记日志，不影响本轮回复 */
+        try {
+            memoryChunkService.recordTurn(userId, conversation.getCharacterId(), conversationId, turnId,
+                    Long.valueOf(response.userMessage().id()), response.userMessage().content(),
+                    Long.valueOf(response.assistantMessage().id()), response.assistantMessage().content());
+        } catch (RuntimeException ex) {
+            log.warn("记忆分块写入失败 turn={}: {}", turnId, ex.getMessage());
         }
         return response;
     }

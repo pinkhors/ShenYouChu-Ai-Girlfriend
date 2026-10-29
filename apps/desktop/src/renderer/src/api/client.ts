@@ -336,6 +336,97 @@ export interface MemoryView {
   readonly characterId: string | null
 }
 
+/** ===== 记忆星图（V6，见 docs/08-memory-graph.md） ===== */
+
+export interface MemoryGraphConstellation {
+  readonly id: string
+  readonly label: string
+  readonly kind: string
+  readonly count: number
+  readonly angle: number
+  readonly radius: number
+}
+
+export interface MemoryGraphNode {
+  readonly id: string
+  readonly chunkId: string
+  readonly label: string
+  readonly category: string
+  readonly angle: number
+  readonly radius: number
+  readonly importance: number
+  readonly ghost: boolean
+  readonly createdAt: string
+  readonly conversationId: string | null
+}
+
+export type MemoryGraphEdgeKind = 'ownership' | 'semantic' | 'temporal'
+
+export interface MemoryGraphEdge {
+  readonly id: string
+  readonly source: string
+  readonly target: string
+  readonly kind: MemoryGraphEdgeKind
+  readonly weight: number
+}
+
+export interface MemoryGraphStats {
+  readonly nodes: number
+  readonly ghosts: number
+  readonly edges: number
+}
+
+export interface MemoryGraphView {
+  readonly version: number
+  readonly characterId: string
+  readonly characterName: string
+  readonly generatedAt: string
+  readonly mode: 'incremental' | 'nightly'
+  readonly layoutSeed: string
+  readonly constellations: readonly MemoryGraphConstellation[]
+  readonly nodes: readonly MemoryGraphNode[]
+  readonly edges: readonly MemoryGraphEdge[]
+  readonly stats: MemoryGraphStats
+}
+
+export interface MemoryChunkDetail {
+  readonly id: string
+  readonly characterId: string
+  readonly conversationId: string
+  readonly userMessageId: string | null
+  readonly assistantMessageId: string | null
+  readonly content: string
+  readonly summary: string
+  readonly topics: readonly string[]
+  readonly entities: readonly string[]
+  readonly category: string
+  readonly createdAt: string
+  readonly invalidAt: string | null
+}
+
+function characterQuery(characterId?: string): string {
+  return characterId === undefined || characterId === '' ? '' : `?characterId=${encodeURIComponent(characterId)}`
+}
+
+/** 取该角色最新星图快照；不存在时后端现场构建。 */
+export function fetchMemoryGraph(characterId?: string): Promise<MemoryGraphView> {
+  return request<MemoryGraphView>(`/memory-graph${characterQuery(characterId)}`)
+}
+
+/** 强制重建星图（手动刷新/夜间校准）。 */
+export function rebuildMemoryGraph(characterId?: string): Promise<MemoryGraphView> {
+  return request<MemoryGraphView>(`/memory-graph/rebuild${characterQuery(characterId)}`, { method: 'POST' })
+}
+
+export function fetchMemoryChunk(chunkId: string): Promise<MemoryChunkDetail> {
+  return request<MemoryChunkDetail>(`/memory-graph/chunks/${encodeURIComponent(chunkId)}`)
+}
+
+/** 遗忘一条记忆：节点变幽灵，不再参与检索。 */
+export function forgetMemoryChunk(chunkId: string): Promise<void> {
+  return request<void>(`/memory-graph/chunks/${encodeURIComponent(chunkId)}/forget`, { method: 'POST' })
+}
+
 export interface ActivityEventView {
   readonly id: string
   readonly eventType: string

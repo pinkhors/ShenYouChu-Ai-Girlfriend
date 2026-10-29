@@ -172,6 +172,18 @@
 
 索引：`INDEX(user_id, memory_type, created_at)`、`INDEX(user_id, character_id, created_at)`。向量数据存 Milvus，`id` 与本文一致；**向量检索必须携带 user_id 与 character_id 过滤**，禁止先全局检索再应用层过滤作为唯一防线。
 
+### 2.6.1 memory_chunks / memory_edges / memory_graph_snapshots（V6）
+
+记忆星图的写入模型与只读投影，详见 [08 记忆星图](../08-memory-graph.md)。
+
+`memory_chunks`：`id, user_id, character_id, conversation_id, turn_id, user_message_id, assistant_message_id, chunk_text, summary, category(fact|promise|episode|habit), topics_json, entities_json, embedding_model, embedding_dim, embedding_json, importance, valid_from, invalid_at, superseded_by, created_at, updated_at, deleted_at`。唯一键 `(user_id, turn_id)`；索引 `(user_id, character_id, invalid_at)`；向量只存本表，不进快照。
+
+`memory_edges`：`id, user_id, character_id, source_chunk_id, target_chunk_id, edge_type(semantic|temporal|recall), weight, created_at, updated_at, deleted_at`；唯一键 `(user_id, source_chunk_id, target_chunk_id, edge_type)`。
+
+`memory_recall_events`：`id, user_id, character_id, chunk_id, turn_id, rank_no, injected, created_at`；P1 建表，检索管线接入后写入。
+
+`memory_graph_snapshots`：`id, user_id, character_id, version, mode(incremental|nightly), payload_json, generated_at, created_at, updated_at, deleted_at`；唯一键 `(user_id, character_id)`，只保留最新一份。`payload_json` 禁止包含向量。
+
 ### 2.7 media_sessions
 
 一次实时媒体连接。
@@ -389,6 +401,17 @@
 | GET | `/memories` | 列表（`characterId` 可选，按角色筛选；不传返回全部） |
 | PATCH | `/memories/{id}` | 纠正内容（标记 corrected 并写入新版本） |
 | DELETE | `/memories/{id}` | 删除并同步移除向量 |
+
+### 3.3.1 记忆星图（`/memory-graph`）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/memory-graph?characterId=` | 取该角色最新快照；不存在则构建。`characterId` 缺省用当前角色 |
+| POST | `/memory-graph/rebuild?characterId=` | 强制重建并返回新快照 |
+| GET | `/memory-graph/chunks/{chunkId}` | 记忆详情：原文、摘要、话题、实体、来源消息、失效时间 |
+| POST | `/memory-graph/chunks/{chunkId}/forget` | 遗忘：写 `invalid_at`，节点变幽灵，返回 204 |
+
+快照响应字段：`version, characterId, characterName, generatedAt, mode, layoutSeed, constellations[], nodes[], edges[], stats`；节点含 `id, chunkId, label, category, angle, radius, importance, ghost, createdAt, conversationId`；边含 `id, source, target, kind(ownership|semantic|temporal), weight`。不返回向量。越权统一 404 `MEMORY_NOT_FOUND`。
 
 ### 3.4 媒体与录像
 

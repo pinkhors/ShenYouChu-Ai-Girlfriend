@@ -71,6 +71,22 @@ shenyouchu:
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
     max-tokens: ${LLM_MAX_TOKENS:256}
     temperature: ${LLM_TEMPERATURE:0.8}
+  memory:
+    # 记忆星图：分块、向量、图投影。详见 docs/08-memory-graph.md
+    embedding:
+      # false 时使用离线哈希向量（确定性、可测试）；生产建议接 OpenAI 兼容 /embeddings
+      enabled: ${MEMORY_EMBEDDING_ENABLED:false}
+      base-url: ${MEMORY_EMBEDDING_BASE_URL:}
+      api-key: ${MEMORY_EMBEDDING_API_KEY:}
+      model: ${MEMORY_EMBEDDING_MODEL:text-embedding-3-small}
+      dim: ${MEMORY_EMBEDDING_DIM:128}
+      timeout-seconds: ${MEMORY_EMBEDDING_TIMEOUT_SECONDS:10}
+    graph:
+      max-nodes: ${MEMORY_GRAPH_MAX_NODES:300}
+      max-ghosts: ${MEMORY_GRAPH_MAX_GHOSTS:20}
+      semantic-threshold: ${MEMORY_GRAPH_SEMANTIC_THRESHOLD:0.35}
+      max-degree: ${MEMORY_GRAPH_MAX_DEGREE:5}
+      nightly-cron: ${MEMORY_GRAPH_NIGHTLY_CRON:0 30 3 * * *}
   voice:
     # false 时使用占位 ASR/TTS（音频按 UTF-8 文本解码、TTS 返回 none），保证离线可演示；
     # true 时调用 asr-url / tts-url 的外部服务，失败自动回退占位实现。

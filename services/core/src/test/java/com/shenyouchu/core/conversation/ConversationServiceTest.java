@@ -5,6 +5,7 @@ import com.shenyouchu.core.character.CharacterService;
 import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.mapper.MemoryMapper;
+import com.shenyouchu.core.memorygraph.MemoryGraphPurgeService;
 import com.shenyouchu.core.message.mapper.MessageMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,8 @@ class ConversationServiceTest {
     private MessageMapper messageMapper;
     @Mock
     private MemoryMapper memoryMapper;
+    @Mock
+    private MemoryGraphPurgeService graphPurgeService;
 
     private ConversationService conversationService;
 
@@ -38,7 +41,7 @@ class ConversationServiceTest {
     void setUp() {
         conversationService = new ConversationService(
                 conversationMapper, characterService, conversationProvisioner,
-                activityService, messageMapper, memoryMapper);
+                activityService, messageMapper, memoryMapper, graphPurgeService);
     }
 
     @Test

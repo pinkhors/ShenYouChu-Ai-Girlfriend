@@ -12,6 +12,7 @@ import com.shenyouchu.core.conversation.dto.EnsureConversationResult;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.Memory;
 import com.shenyouchu.core.memory.mapper.MemoryMapper;
+import com.shenyouchu.core.memorygraph.MemoryGraphPurgeService;
 import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.mapper.MessageMapper;
 import org.springframework.stereotype.Service;
@@ -40,19 +41,22 @@ public class ConversationService {
     private final ActivityService activityService;
     private final MessageMapper messageMapper;
     private final MemoryMapper memoryMapper;
+    private final MemoryGraphPurgeService graphPurgeService;
 
     public ConversationService(ConversationMapper conversationMapper,
                                CharacterService characterService,
                                ConversationProvisioner conversationProvisioner,
                                ActivityService activityService,
                                MessageMapper messageMapper,
-                               MemoryMapper memoryMapper) {
+                               MemoryMapper memoryMapper,
+                               MemoryGraphPurgeService graphPurgeService) {
         this.conversationMapper = conversationMapper;
         this.characterService = characterService;
         this.conversationProvisioner = conversationProvisioner;
         this.activityService = activityService;
         this.messageMapper = messageMapper;
         this.memoryMapper = memoryMapper;
+        this.graphPurgeService = graphPurgeService;
     }
 
     /**
@@ -119,6 +123,7 @@ public class ConversationService {
         int memories = memoryMapper.delete(Wrappers.<Memory>lambdaQuery()
                 .eq(Memory::getUserId, userId)
                 .eq(Memory::getConversationId, conversationId));
+        graphPurgeService.purgeConversation(userId, conversationId);
 
         /* updateById 默认忽略 null 字段，必须用 UpdateWrapper 显式清空 title/last_message_at。 */
         conversationMapper.update(null, Wrappers.<Conversation>lambdaUpdate()
