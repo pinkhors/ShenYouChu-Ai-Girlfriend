@@ -38,9 +38,22 @@ public class MemoryChunkService {
         this.objectMapper = objectMapper;
     }
 
+    /** 对话入库路径：写 chunk 后立即增量刷新星图。 */
     public void recordTurn(Long userId, Long characterId, Long conversationId, String turnId,
                            Long userMessageId, String userText,
                            Long assistantMessageId, String assistantText) {
+        recordTurn(userId, characterId, conversationId, turnId, userMessageId, userText,
+                assistantMessageId, assistantText, true);
+    }
+
+    /**
+     * 写一轮 chunk；{@code refreshGraph=false} 供历史回填使用——回填完成后再统一重建一次，
+     * 避免每一轮都重算整张图。除刷新时机外，其余语义与默认方法完全一致。
+     */
+    public void recordTurn(Long userId, Long characterId, Long conversationId, String turnId,
+                           Long userMessageId, String userText,
+                           Long assistantMessageId, String assistantText,
+                           boolean refreshGraph) {
         if (userId == null || characterId == null || conversationId == null
                 || turnId == null || turnId.isBlank()) {
             return;
@@ -83,7 +96,9 @@ public class MemoryChunkService {
             return;
         }
 
-        graphService.refreshIncremental(userId, characterId);
+        if (refreshGraph) {
+            graphService.refreshIncremental(userId, characterId);
+        }
     }
 
     /** 供测试与补偿任务使用：按 turn 查重。 */

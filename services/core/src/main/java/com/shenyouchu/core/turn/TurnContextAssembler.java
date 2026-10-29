@@ -1,10 +1,19 @@
 package com.shenyouchu.core.turn;
 
 import com.shenyouchu.core.memory.dto.MemoryView;
+import com.shenyouchu.core.memorygraph.retrieval.MemoryContext;
+import com.shenyouchu.core.memorygraph.retrieval.MemoryItem;
 import com.shenyouchu.core.message.Message;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * 普通回复的上下文组装（文档 09 §8.6 / AC-16、AC-17）。
@@ -27,6 +36,17 @@ public final class TurnContextAssembler {
     static final int MAX_MEMORIES = 5;
     static final int MAX_MEMORY_CHARS = 120;
     static final int MAX_TOTAL_CHARS = 2000;
+    static final int MAX_MEMORY_CONTEXT_CHARS = 2400;
+    static final int MAX_FACTS = 3;
+    static final int MAX_PROMISES = 2;
+    static final int MAX_EPISODES = 3;
+    static final int MAX_SUMMARIES = 1;
+    static final int MAX_HABITS = 2;
+    static final int MAX_ITEM_CHARS = 120;
+
+    private static final DateTimeFormatter NOW_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE HH:mm", Locale.SIMPLIFIED_CHINESE)
+                    .withZone(ZoneId.systemDefault());
 
     /**
      * @param recentMessages 当前会话最近消息，按时间升序；本方法只取最后 10 条
@@ -51,6 +71,103 @@ public final class TurnContextAssembler {
             context = render(dialogLines, memoryLines, relationship);
         }
         return context;
+    }
+
+    /**
+     * v1.1 记忆上下文：时间 + 五类记忆 + 最近对话 + 关系（文档 08 §18 / 09 §8.6）。
+     *
+     * <p>超长时先丢最早对话，再丢最早经历；事实、约定、时间、关系始终保留。
+     */
+    public String assembleMemory(List<Message> recentMessages, MemoryContext memory,
+                                 Integer mood, Integer intimacy, Instant now, Instant knownSince) {
+        Instant current = now == null ? Instant.now() : now;
+        List<String> dialogLines = dialogLines(recentMessages);
+        List<String> factLines = itemLines(memory == null ? List.of() : memory.facts(), MAX_FACTS);
+        List<String> promiseLines = itemLines(memory == null ? List.of() : memory.promises(), MAX_PROMISES);
+        List<String> episodeLines = itemLines(memory == null ? List.of() : memory.episodes(), MAX_EPISODES);
+        List<String> summaryLines = itemLines(memory == null ? List.of() : memory.summaries(), MAX_SUMMARIES);
+        List<String> habitLines = itemLines(memory == null ? List.of() : memory.habits(), MAX_HABITS);
+        String timeLine = timeLine(current, knownSince);
+        String relationship = relationshipLine(mood, intimacy);
+
+        String context = renderMemory(timeLine, factLines, promiseLines, summaryLines,
+                episodeLines, habitLines, dialogLines, relationship);
+        while (charCount(context) > MAX_MEMORY_CONTEXT_CHARS && !dialogLines.isEmpty()) {
+            dialogLines.remove(0);
+            context = renderMemory(timeLine, factLines, promiseLines, summaryLines,
+                    episodeLines, habitLines, dialogLines, relationship);
+        }
+        while (charCount(context) > MAX_MEMORY_CONTEXT_CHARS && !episodeLines.isEmpty()) {
+            episodeLines.remove(0);
+            context = renderMemory(timeLine, factLines, promiseLines, summaryLines,
+                    episodeLines, habitLines, dialogLines, relationship);
+        }
+        while (charCount(context) > MAX_MEMORY_CONTEXT_CHARS && !summaryLines.isEmpty()) {
+            summaryLines.remove(0);
+            context = renderMemory(timeLine, factLines, promiseLines, summaryLines,
+                    episodeLines, habitLines, dialogLines, relationship);
+        }
+        return context;
+    }
+
+    private static String renderMemory(String timeLine, List<String> facts, List<String> promises,
+                                       List<String> summaries, List<String> episodes,
+                                       List<String> habits, List<String> dialogLines,
+                                       String relationship) {
+        List<String> sections = new ArrayList<>(9);
+        sections.add(REFERENCE_PREFIX);
+        if (timeLine != null) {
+            sections.add(timeLine);
+        }
+        appendSection(sections, "关于你：", facts);
+        appendSection(sections, "你们的约定 / 待办：", promises);
+        appendSection(sections, "长期概况：", summaries);
+        appendSection(sections, "最近的经历：", episodes);
+        appendSection(sections, "她学到的相处方式：", habits);
+        if (!dialogLines.isEmpty()) {
+            sections.add(DIALOG_HEADER + "\n" + String.join("\n", dialogLines));
+        }
+        if (relationship != null) {
+            sections.add(relationship);
+        }
+        return String.join("\n", sections);
+    }
+
+    private static void appendSection(List<String> sections, String header, List<String> lines) {
+        if (!lines.isEmpty()) {
+            sections.add(header + "\n" + String.join("\n", lines));
+        }
+    }
+
+    private static List<String> itemLines(List<MemoryItem> items, int limit) {
+        if (items == null || items.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        List<String> lines = new ArrayList<>(Math.min(items.size(), limit));
+        for (MemoryItem item : items) {
+            if (item == null || item.text() == null || item.text().isBlank()) {
+                continue;
+            }
+            String text = item.text().trim();
+            if (!seen.add(text)) {
+                continue;
+            }
+            lines.add("- " + truncate(text, MAX_ITEM_CHARS));
+            if (lines.size() >= limit) {
+                break;
+            }
+        }
+        return lines;
+    }
+
+    private static String timeLine(Instant now, Instant knownSince) {
+        String formatted = NOW_FORMAT.format(now);
+        if (knownSince == null || knownSince.isAfter(now)) {
+            return "现在：" + formatted + "。";
+        }
+        long days = ChronoUnit.DAYS.between(knownSince, now) + 1;
+        return "现在：" + formatted + "；认识第 " + Math.max(1, days) + " 天。";
     }
 
     private static List<String> dialogLines(List<Message> recentMessages) {

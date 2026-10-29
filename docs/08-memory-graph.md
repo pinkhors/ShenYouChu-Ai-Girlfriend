@@ -353,13 +353,177 @@ shenyouchu:
 - 迁移：`services/core/src/main/resources/db/migration/V6__memory_graph.sql`（4 张表 + 索引 + 级联外键）；
 - 后端：`com.shenyouchu.core.memorygraph` 下的实体、Mapper、`MemorySignals`、`HashingEmbeddingClient` / `EmbeddingService`、`MemoryChunkService`、`GraphProjector`、`MemoryGraphService`、`MemoryGraphController`、`MemoryGraphScheduler`；
 - 对话接入：`TurnService` 在消息事务提交后写 chunk 并增量刷新快照，失败只记日志；清空聊天记录会同步清理 chunk/边/快照；账号删除通过 `MemoryGraphAccountPurgePort` 清理；
+- v1.1：`memorygraph/retrieval` 提供 `MemoryContext` + `MemoryRecallService`（chunk 向量召回、五类配额、关键词降级、召回日志、300ms 预算）；`TurnService` 已接入该召回结果；`memorygraph/backfill` 提供历史消息回填端点；
 - 前端：`MemoryPanel` 增加「列表 / 星链」切换，`memorygraph/MemoryGraphPanel.tsx` + `.css` 渲染星座/星球/边、详情、遗忘、重建、滚轮缩放；
-- 测试：`GraphProjectorTest`、`MemorySignalsTest`（9 个用例）。
+- 测试：`GraphProjectorTest`、`MemorySignalsTest`、`MemoryRecallScoringTest`（16）、`BackfillGroupingTest`（7）、`TurnContextAssemblerMemoryTest`（4）。
 
 已知偏差（按 P1 范围）：
 
 - 星图滚轮 v0 是缩放，不是「下潜/上浮」；下潜与面包屑在 P2；
-- `habit` 星座保留但暂无写入源，等习惯卡上线；
-- `memory_recall_events` 已建表，检索管线接入后才写入，当前快照没有 recall 边；
+- `habit` / `summary` 两类在 `MemoryContext` 中已留位，但夜间摘要与习惯卡尚未实现，当前为空；
+- `memory_recall_events` 已由 `MemoryRecallService` 写入，但星图快照尚未把 recall 变成可见轨迹（P2）；
 - 增量刷新为“每轮全量重算 + 确定性布局”，夜间校准为同一算法 + 幽灵清理；真实 delta 投影留到规模变大后；
 - 手动「重新整理」当前写入 `mode=nightly`，与夜间任务同路径。
+
+## 17. v1.1 升级：与 09 的衔接
+
+### 17.1 职责边界
+
+| 能力 | 08 记忆星图 | 09 表达与主动消息 |
+|---|---|---|
+| 写入 chunk / 事实 / 摘要 | **拥有**：分块、抽取、向量、有效期、召回日志、回填 | 不写记忆，不直接查 chunk 表 |
+| 检索 | **拥有**：`MemoryContext` 的召回、排序、配额、降级 | 只消费 `MemoryContext` |
+| 提示组装 | 不组装用户提示，不决定 section 顺序 | **拥有**：最近对话、记忆段落、关系、时间、温度、主动指令 |
+| 星图投影 | **拥有**：snapshot、边、幽灵、布局 | 不读快照 |
+| 纠错/遗忘 | **拥有**：失效、幽灵、重建 | 只调用遗忘接口，不直接改表 |
+
+一句话：**08 是记忆的“写入 + 检索 + 索引”，09 是记忆的“消费 + 表达”。** 09 不得再直接调用 `MemoryService.list` 作为长期记忆来源；08 不得把提示文案写进快照。
+
+### 17.2 数据流
+
+```
+对话 ──► 08 写入 chunk（含 embedding / category / validity）
+                │
+                ├──► 20:30/03:30 夜间：摘要 / 事实 / 习惯卡 / 幽灵化
+                │
+当前输入 ──► 08 MemoryRecallService ──► MemoryContext
+                                          │
+最近对话 / 关系 / 时间 ────────────────────┤
+                                          ▼
+                                  09 TurnContextAssembler
+                                          │
+                                          ▼
+                                  system prompt + user text
+                                          │
+                                          ▼
+                                   LLM（角色温度）
+                                          │
+                                          ▼
+                                  回复 + 落库 + 08 再写入
+```
+
+### 17.3 共享概念（两份文档必须同名）
+
+| 概念 | 定义 |
+|---|---|
+| `MemoryContext` | 一次检索的结果容器：`facts / promises / episodes / summaries / habits / meta` |
+| `MemoryItem` | 一条可注入的记忆：`id、type、text、source、createdAt、score、validity` |
+| 事实 `fact` | 稳定偏好/画像，如“不吃香菜” |
+| 约定 `promise` | 双方承诺/待办，带 `dueAt` 与 `open/closed` |
+| 经历 `episode` | 一次具体对话/事件，来自 chunk |
+| 习惯 `habit` | 相处中形成的说法/仪式，来自习惯卡 |
+| 摘要 `summary` | 周/月/年概况，来自分层摘要 |
+| 幽灵 `ghost` | `invalid_at != null` 的旧事实，默认不召回 |
+
+## 18. 检索契约（v1.1）
+
+### 18.1 输入
+
+```text
+userId, characterId, query（当前用户输入）, turnId,
+now（服务端时间）, profile（normal / proactive / recall）
+```
+
+### 18.2 输出
+
+```json
+{
+  "facts":     [{ "id": "...", "text": "不喜欢香菜", "source": "chunk:1", "score": 0.82 }],
+  "promises":  [{ "id": "...", "text": "答应下次早点睡", "dueAt": null, "status": "open" }],
+  "episodes":  [{ "id": "chunk:2", "text": "上周面试很紧张", "createdAt": "..." }],
+  "summaries": [{ "id": "week:2026-10-20", "text": "这一周在准备面试", "level": "week" }],
+  "habits":    [{ "id": "habit:3", "text": "你加班晚了她先问吃了吗" }],
+  "meta":      { "mode": "vector|keyword|empty", "tookMs": 42, "degraded": false }
+}
+```
+
+约束：
+
+- 每条 `text` 不超过 120 字；
+- `facts` 最多 3 条、`promises` 最多 2 条、`episodes` 最多 3 条、`summaries` 最多 1 条、`habits` 最多 2 条；
+- 默认排除 `invalid_at != null`；`profile=recall` 才允许带幽灵；
+- 同一 `source` 不重复出现；相似度差小于 0.03 的近重复只留一条。
+
+### 18.3 检索与排序
+
+1. 过滤：`user_id + character_id + invalid_at is null`；
+2. 分类：按 `category` 分流到 facts / promises / episodes；
+3. 向量：query embedding 与 chunk embedding 余弦；
+4. 打分：`score = cosine + 0.10 * recency + 0.05 * importance + 0.05 * openPromiseBoost`；
+5. 配额：每类取 top-k，按分数排序后截断；
+6. 时间：`now` 之后不取；承诺过期超过 7 天降权；
+7. 记录：每条注入项写 `memory_recall_events`（rank、injected）。
+
+### 18.4 异常与降级
+
+| 异常 | 行为 |
+|---|---|
+| embedding 超时/失败 | 降级关键词检索 `MemoryService.list`，`meta.mode=keyword` |
+| 无 chunk（新用户/未回填） | 降级到关键词记忆最新 3 条作为 facts（`mode=keyword`、`degraded=false`）；仍为空则返回空 `MemoryContext` |
+| 单类为空 | 允许，`MemoryContext` 不保证五类都有 |
+| 向量维度不一致 | 跳过该条，不抛错 |
+| 数据库异常 | 返回空 + `degraded=true`，回复链路不失败 |
+| 超过 300ms | 放弃剩余向量计算，返回已排好的部分 |
+
+## 19. 向量库入库边界
+
+**入向量库（按语义检索单元）**
+
+| 内容 | 单位 | 必要 metadata | 说明 |
+|---|---|---|---|
+| 情景 chunk | 一问一答/事件 | user、character、category、day、validity、source ids、importance | 主力召回 |
+| 事实/偏好 | 一条规范陈述 | 主语、谓词、值、confidence、validity | 高精度，常驻少量 |
+| 约定/开放话题 | 一条约定 | 对方、dueAt、status、source | 主动消息锚点 |
+| 习惯卡条目 | 一条习惯 | version、until、superseded_by | 人格连续性 |
+| 周/月/年摘要 | 一层一条 | level、period、来源范围 | 长期轮廓 |
+| 实体卡 | 一个实体 | 别名、关系、首次出现 | 查询扩展/图连线 |
+
+**不入向量库**
+
+- 原始消息（存 MySQL；只作为 chunk 来源）；
+- 人设/说话风格（属于提示词）；
+- 寒暄、纯语气词、重复内容（噪声，入库前过滤）；
+- 已失效旧事实（保留 SQL 历史，默认不建/不召回索引）；
+- 向量库不是真相源：MySQL 存规范数据，向量库可重建。
+
+## 20. 记忆类型与生命周期
+
+| 类型 | 来源 | 有效期 | 更新方式 |
+|---|---|---|---|
+| episode | 对话 chunk | 长期 | 追加 |
+| fact | 规则/LLM 抽取 | `valid_from` 起，被取代时 `invalid_at` | 新事实取代旧事实 |
+| promise | 约定识别 | 到期后 7 天降权，用户确认关闭 | `status=open/closed` |
+| habit | 夜间习惯卡 | 版本化，旧版幽灵 | 每晚增量 |
+| summary | 夜间分层 | 层级固定，周期结束生成 | 周→月→年 |
+
+P1 实现映射：`memory_chunks.category` 直接映射 fact/promise/episode；`summary/habit` 先返回空，等夜间管线接入。P2 新增 `memory_facts`、`memory_summaries`（或扩展现有表），不改变 `MemoryContext` 契约。
+
+## 21. 回填与重建
+
+- `POST /api/v1/memory-graph/backfill?characterId=&limit=`：按 `turn_id` 聚合历史消息，补写 chunk；幂等；`limit` 默认 200、上限 500；已存在的轮次不占配额，可分多次补齐；完成后重建一次快照。
+- 回填只补 chunk，不补摘要/习惯卡；摘要由夜间任务从 chunk 生成。
+- 重建：快照可随时从 chunk 重建；向量索引可重算；不依赖快照历史。
+
+## 22. 完成标准（08 v1.1）
+
+| ID | 标准 | 验证 |
+|---|---|---|
+| AC-08-1 | 一轮对话后 1 秒内可检索到该 chunk | 集成测试/手工 |
+| AC-08-2 | 召回按 user+character 隔离，越权 0 命中 | 单测 + SQL 断言 |
+| AC-08-3 | `invalid_at` 非空的记忆默认不召回 | 单测 |
+| AC-08-4 | 五类配额与 120 字上限生效 | 单测 |
+| AC-08-5 | embedding 失败自动降级关键词，回复不失败 | 故障注入测试 |
+| AC-08-6 | 每次注入写 recall 事件；星图轨迹在 P2 可见 | 单测/集成测试 |
+| AC-08-7 | 回填幂等，重复调用不产生重复 chunk | 单测 |
+| AC-08-8 | 夜間摘要/习惯卡缺失时 `MemoryContext` 仍合法 | 单测 |
+| AC-08-9 | 检索 p95 ≤ 300ms（本地 embedding） | 压测/日志 |
+| AC-08-10 | 删除/遗忘后 1 次重建内不再召回 | 集成测试 |
+
+## 23. 与 09 的接口变更清单
+
+1. 09 §8.6 的“记忆”来源从 `MemoryService.list` 改为 `MemoryRecallService.recall`；
+2. 09 的上下文组装入参从 `List<MemoryView>` 改为 `MemoryContext`；
+3. 09 新增记忆 section 顺序与配额（见 09 §8.7）；
+4. 09 的主动消息使用 `profile=proactive` 的 `MemoryContext`（开放话题优先）；
+5. 09 的失败降级：`meta.degraded=true` 时只带最近对话与关系，不再读关键词表；
+6. 两份文档共享本文 §17.3 的术语，不得各自命名。

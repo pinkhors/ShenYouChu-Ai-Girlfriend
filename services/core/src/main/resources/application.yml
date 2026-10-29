@@ -87,6 +87,11 @@ shenyouchu:
       semantic-threshold: ${MEMORY_GRAPH_SEMANTIC_THRESHOLD:0.35}
       max-degree: ${MEMORY_GRAPH_MAX_DEGREE:5}
       nightly-cron: ${MEMORY_GRAPH_NIGHTLY_CRON:0 30 3 * * *}
+    recall:
+      # 对话时的记忆召回（文档 08 §18）；关闭后返回空 MemoryContext
+      enabled: ${MEMORY_RECALL_ENABLED:true}
+      max-chunks: ${MEMORY_RECALL_MAX_CHUNKS:300}
+      max-memories: ${MEMORY_RECALL_MAX_MEMORIES:5}
   voice:
     # false 时使用占位 ASR/TTS（音频按 UTF-8 文本解码、TTS 返回 none），保证离线可演示；
     # true 时调用 asr-url / tts-url 的外部服务，失败自动回退占位实现。

@@ -9,8 +9,9 @@ import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.MemoryService;
-import com.shenyouchu.core.memory.dto.MemoryView;
 import com.shenyouchu.core.memorygraph.MemoryChunkService;
+import com.shenyouchu.core.memorygraph.retrieval.MemoryContext;
+import com.shenyouchu.core.memorygraph.retrieval.MemoryRecallService;
 import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.dto.MessagePage;
 import com.shenyouchu.core.message.dto.MessageView;
@@ -38,9 +39,8 @@ public class TurnService {
 
     private static final Logger log = LoggerFactory.getLogger(TurnService.class);
 
-    /** 普通回复上下文（文档 09 §8.6）：最近对话 10 条、记忆 5 条。 */
+    /** 普通回复上下文（文档 09 §8.6）：最近对话 10 条。 */
     private static final int RECENT_MESSAGE_LIMIT = 10;
-    private static final int CONTEXT_MEMORY_LIMIT = 5;
 
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
@@ -49,6 +49,7 @@ public class TurnService {
     private final ActivityService activityService;
     private final MemoryService memoryService;
     private final MemoryChunkService memoryChunkService;
+    private final MemoryRecallService memoryRecallService;
     private final RelationshipService relationshipService;
     private final CharacterMapper characterMapper;
     private final CharacterExpressionService expressionService;
@@ -62,6 +63,7 @@ public class TurnService {
                        ActivityService activityService,
                        MemoryService memoryService,
                        MemoryChunkService memoryChunkService,
+                       MemoryRecallService memoryRecallService,
                        RelationshipService relationshipService,
                        CharacterMapper characterMapper,
                        CharacterExpressionService expressionService,
@@ -73,6 +75,7 @@ public class TurnService {
         this.activityService = activityService;
         this.memoryService = memoryService;
         this.memoryChunkService = memoryChunkService;
+        this.memoryRecallService = memoryRecallService;
         this.relationshipService = relationshipService;
         this.characterMapper = characterMapper;
         this.expressionService = expressionService;
@@ -92,7 +95,7 @@ public class TurnService {
 
         String prompt = personaService.systemPrompt(conversation.getCharacterId());
         double temperature = replyTemperature(conversation);
-        String context = buildContext(userId, conversation);
+        String context = buildContext(userId, conversation, text, turnId);
         String reply = replyGenerator.generate(userId, conversation.getCharacterId(), prompt, context,
                 text, temperature);
 
@@ -118,12 +121,22 @@ public class TurnService {
      * <p>最近对话、记忆、关系状态分别读取，任一部分失败只记 warn 并跳过，
      * 回复链路不因此失败。所有查询都在事务外执行，与“模型调用在事务外”一致。
      */
-    private String buildContext(Long userId, Conversation conversation) {
+    private String buildContext(Long userId, Conversation conversation, String text, String turnId) {
         Long conversationId = conversation.getId();
         Long characterId = conversation.getCharacterId();
 
         List<Message> recentMessages = recentMessages(userId, conversationId);
-        List<MemoryView> memories = recentMemories(userId, characterId);
+        MemoryContext memory = MemoryContext.empty("empty", false);
+        if (characterId != null) {
+            try {
+                memory = memoryRecallService.recall(userId, characterId, text, turnId);
+                if (memory == null) {
+                    memory = MemoryContext.empty("empty", false);
+                }
+            } catch (RuntimeException ex) {
+                log.warn("记忆召回失败，本轮只带最近对话 character={}: {}", characterId, ex.getMessage());
+            }
+        }
 
         Integer mood = null;
         Integer intimacy = null;
@@ -136,7 +149,8 @@ public class TurnService {
                 log.warn("读取关系状态失败 conversation={}: {}", conversationId, ex.getMessage());
             }
         }
-        return contextAssembler.assemble(recentMessages, memories, mood, intimacy);
+        return contextAssembler.assembleMemory(recentMessages, memory, mood, intimacy,
+                Instant.now(), conversation.getCreatedAt());
     }
 
     /** 当前会话最近 10 条消息，按 id 倒序取再翻正为时间升序；不含本轮尚未落库的输入。 */
@@ -159,21 +173,7 @@ public class TurnService {
         }
     }
 
-    /** 该角色下最新的 5 条记忆；查询失败时返回空列表，上下文其余部分照常注入。 */
-    private List<MemoryView> recentMemories(Long userId, Long characterId) {
-        try {
-            List<MemoryView> memories = memoryService.list(userId, characterId);
-            if (memories == null || memories.isEmpty()) {
-                return List.of();
-            }
-            return memories.size() > CONTEXT_MEMORY_LIMIT
-                    ? new ArrayList<>(memories.subList(0, CONTEXT_MEMORY_LIMIT))
-                    : memories;
-        } catch (RuntimeException ex) {
-            log.warn("读取记忆失败 character={}: {}", characterId, ex.getMessage());
-            return List.of();
-        }
-    }
+
 
     private TurnResponse persistTurn(Conversation conversation, Long userId, String text,
                                      String turnId, String reply) {

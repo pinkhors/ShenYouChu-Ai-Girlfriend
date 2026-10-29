@@ -427,6 +427,7 @@
 | POST | `/memory-graph/rebuild?characterId=` | 强制重建并返回新快照 |
 | GET | `/memory-graph/chunks/{chunkId}` | 记忆详情：原文、摘要、话题、实体、来源消息、失效时间 |
 | POST | `/memory-graph/chunks/{chunkId}/forget` | 遗忘：写 `invalid_at`，节点变幽灵，返回 204 |
+| POST | `/memory-graph/backfill?characterId=&limit=` | 历史消息回填 chunk；幂等；返回 `{created,skipped}` |
 
 快照响应字段：`version, characterId, characterName, generatedAt, mode, layoutSeed, constellations[], nodes[], edges[], stats`；节点含 `id, chunkId, label, category, angle, radius, importance, ghost, createdAt, conversationId`；边含 `id, source, target, kind(ownership|semantic|temporal), weight`。不返回向量。越权统一 404 `MEMORY_NOT_FOUND`。
 
