@@ -13,6 +13,7 @@
 | [06 行为边界测试集](./06-boundary-test-set.md) | 24 条敏感请求用例与期望行为，供接入真实模型后抽检 | 产品、测试 |
 | [07 女友角色设定设计](./07-character-customization.md) | 多角色模型、形象/性格/家庭选项、创建与切换流程、契约与迁移；P0 + P1 核心项已实现 | 产品、设计、开发、测试 |
 | [08 记忆星图](./08-memory-graph.md) | 记忆分块/向量/话题实体管线、GraphProjector 快照、星图 API 与前端 v0；P1 设计 | 产品、设计、开发、测试 |
+| [09 表达温度与主动消息](./09-expression-temperature-and-proactive-message.md) | 角色形象/性格推导 temperature、用户覆盖、主动开口策略与受控端点；P1 实现基线 | 产品、设计、开发、测试 |
 | [CONTEXT.md](../CONTEXT.md) | 项目术语表 | 所有人 |
 | [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界、ADR-0003 MyBatis-Plus 持久化、ADR-0004 本地对象存储、ADR-0005 雪花主键） | 开发、评审 |
 

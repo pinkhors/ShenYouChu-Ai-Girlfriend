@@ -29,6 +29,32 @@ class LlmHttpClientTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void bodyWithContextAddsIndependentSystemMessageBeforeUser() {
+        Map<String, Object> body = LlmHttpClient.buildBody(
+                "test-model", "SYSTEM", "CONTEXT", "USER", 256, 0.7);
+
+        assertThat(body).containsEntry("temperature", 0.7);
+        List<Map<String, String>> messages = (List<Map<String, String>>) body.get("messages");
+        assertThat(messages).hasSize(3);
+        assertThat(messages.get(0)).containsEntry("role", "system").containsEntry("content", "SYSTEM");
+        assertThat(messages.get(1)).containsEntry("role", "system").containsEntry("content", "CONTEXT");
+        assertThat(messages.get(2)).containsEntry("role", "user").containsEntry("content", "USER");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void blankContextKeepsLegacySystemAndUserMessages() {
+        Map<String, Object> body = LlmHttpClient.buildBody(
+                "test-model", "SYSTEM", "   ", "USER", 128, 0.5);
+
+        List<Map<String, String>> messages = (List<Map<String, String>>) body.get("messages");
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0)).containsEntry("role", "system").containsEntry("content", "SYSTEM");
+        assertThat(messages.get(1)).containsEntry("role", "user").containsEntry("content", "USER");
+    }
+
+    @Test
     void textOfHandlesStringAndMultimodalArray() throws Exception {
         JsonNode stringNode = objectMapper.readTree("\"连接成功\"");
         JsonNode arrayNode = objectMapper.readTree("[{\"type\":\"text\",\"text\":\"连接\"},{\"type\":\"text\",\"text\":\"成功\"}]");

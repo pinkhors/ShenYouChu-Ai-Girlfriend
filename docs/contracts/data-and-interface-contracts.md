@@ -72,7 +72,7 @@
 | code | VARCHAR(64) | 唯一；官方如 `shenyouchu`，自定义为 `custom-<雪花ID>` |
 | display_name | VARCHAR(64) | 名称；同一 owner 下唯一，官方名保留 |
 | persona_version | VARCHAR(20) | 官方 `v1`；自定义 `custom-v1` |
-| persona_config | JSON | 官方沿用 v1（age/traits/speechStyle/background）；自定义保存 v2 结构化人设 |
+| persona_config | JSON | 官方沿用 v1（age/traits/speechStyle/background）；自定义保存 v2 结构化人设，可含 `expression`（表达温度配置） |
 | avatar_config | JSON | 形象参数；官方预置默认值（本机可覆盖），自定义随账号保存 |
 | is_public | BOOLEAN | 官方 true；自定义永远 false |
 | status | VARCHAR(20) | active / archived；归档只作用于自定义角色 |
@@ -145,7 +145,7 @@
 | role | VARCHAR(16) | user / assistant / system |
 | content | MEDIUMTEXT | 正文 |
 | content_format | VARCHAR(16) | text / markdown |
-| source | VARCHAR(16) | text / voice |
+| source | VARCHAR(16) | text / voice / proactive（`proactive` 表示由主动开口生成，role 仍为 assistant） |
 | asr_confidence | DECIMAL(4,3) | 可空，语音来源 |
 | token_count | INT | 可空 |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
@@ -333,6 +333,8 @@
 | GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100；默认返回最新一页，`cursor` 为上一页 nextCursor，用于继续向更早翻页） |
 | POST | `/conversations/{id}/turns` | 创建轮次（文本输入），返回 turnId |
 | POST | `/conversations/{id}/turns/{turnId}/cancel` | 取消进行中的轮次（仅归属者；未知或已结束返回 404） |
+| GET | `/conversations/{id}/proactive/eligibility` | 主动开口可开口性：`allowed/reason/scene/dailyLimit/usedToday/nextEligibleAt` |
+| POST | `/conversations/{id}/proactive` | 受控主动开口；body 可选 `{trigger: share/follow_up/reminder}`；成功落库 assistant 消息（source=proactive），阻塞按 §3.9 返回 409 |
 
 轮次状态与流式输出通过 WebSocket 下发（见第 4 节），不在 REST 中长轮询。
 
@@ -386,13 +388,28 @@
   "avatarConfig": { "skinTone": "natural", "outfitStyle": "knit" },
   "personality": { "archetype": "tsundere", "modifiers": ["soft-tsundere"], "intensity": "medium", "initiative": "medium", "addressUser": "笨蛋", "selfRef": "我", "jealousy": "low" },
   "family": { "growth": "city", "relations": "polite", "economy": "ordinary", "extraNote": "怕打雷" },
+  "expression": {
+    "mode": "auto",
+    "temperatureOverride": null,
+    "autoTemperature": 0.74,
+    "effectiveTemperature": 0.74,
+    "source": "auto",
+    "explanation": ["基础 0.78", "主性格 温柔治愈 -0.05", "调味 小傲娇 +0.02", "表达 自然 +0.00", "形象 长直发、奶油白 -0.01", "夹取后 0.74"]
+  },
   "version": 3,
   "createdAt": "2026-10-28T09:00:00Z",
   "updatedAt": "2026-10-28T10:00:00Z"
 }
 ```
 
-官方角色的 `personality`/`family` 为 `null`，`tags` 由旧 `traits` 映射；不返回 `persona_config` 原文或提示词。自定义角色提示词由服务端 `CharacterPromptCompiler` 编译，固定安全边界永远最后追加。
+官方角色的 `personality`/`family`/`expression` 为 `null`，`tags` 由旧 `traits` 映射；不返回 `persona_config` 原文或提示词。自定义角色提示词由服务端 `CharacterPromptCompiler` 编译，固定安全边界永远最后追加。
+
+`expression` 规则（详见 [09 文档](../09-expression-temperature-and-proactive-message.md)）：
+
+- `mode` 只允许 `auto` / `manual`；`manual` 必须有 `temperatureOverride ∈ [0.30, 1.20]`，否则 400 `CHARACTER_EXPRESSION_INVALID`；
+- `autoTemperature` 按性格 + 形象推导，夹取 `[0.50, 0.95]`；`effectiveTemperature = temperatureOverride ?? autoTemperature`；
+- `source` 为 `auto` / `manual`；主动消息的 `temperatureSource` 额外允许 `user`（官方角色沿用用户级配置）；`explanation` 顺序固定，形象行只列有贡献字段且为三字段合计；
+- 创建/更新请求可带 `expression`；PATCH 为 `null` 表示不修改；复制角色保留该配置。
 
 ### 3.3 记忆
 
@@ -575,6 +592,8 @@ P1 实现 `MySqlSearchAdapter`（FULLTEXT + ngram）；后续可增加 `OpenSear
 ```
 
 常用码：`UNAUTHENTICATED`(401)、`FORBIDDEN`(403)、`NOT_FOUND`(404)、`VALIDATION_FAILED`(400)、`CONFLICT`(409)、`RATE_LIMITED`(429)、`UPSTREAM_UNAVAILABLE`(503)、`TURN_ALREADY_CANCELLED`(409)、`RECORDING_NOT_READY`(409)、`REASON_REQUIRED`(400)、`SEARCH_UNAVAILABLE`(503)。越权资源统一返回 404，避免泄露存在性。
+
+主动消息相关码（均为 409，除注明外）：`CHARACTER_EXPRESSION_INVALID`(400)、`PROACTIVE_PRIVACY_DISABLED`、`PROACTIVE_USER_BUSY`、`PROACTIVE_NO_HISTORY`、`PROACTIVE_QUIET_HOURS`、`PROACTIVE_UNANSWERED_LIMIT`、`PROACTIVE_DAILY_LIMIT`、`PROACTIVE_USER_JUST_REPLIED`、`PROACTIVE_COOLDOWN`、`PROACTIVE_SUPPRESSED`、`PROACTIVE_GENERATION_FAILED`(502)。
 
 ### 3.10 幂等与重试
 

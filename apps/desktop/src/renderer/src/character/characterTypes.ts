@@ -4,6 +4,14 @@ import {
   normalizeAvatar,
   type AvatarConfig
 } from '../avatar/avatarConfig'
+import {
+  EXPRESSION_AUTO_MAX,
+  EXPRESSION_AUTO_MIN,
+  EXPRESSION_TEMPERATURE_MAX,
+  EXPRESSION_TEMPERATURE_MIN,
+  calculateExpressionTemperature,
+  roundTemperature
+} from './expressionTemperature'
 
 /**
  * 角色设定的领域模型与选项目录（纯逻辑，可在 Node 测试）。
@@ -250,6 +258,36 @@ export const DEFAULT_PERSONALITY: PersonalityConfig = {
   jealousy: 'medium'
 }
 
+/** 表达温度模式（PRD 09 §6.1）。 */
+export type ExpressionMode = 'auto' | 'manual'
+
+/** 用户可写的表达温度配置：只保存模式与手动覆盖值。 */
+export interface ExpressionConfig {
+  readonly mode: ExpressionMode
+  readonly temperatureOverride: number | null
+}
+
+export const DEFAULT_EXPRESSION: ExpressionConfig = {
+  mode: 'auto',
+  temperatureOverride: null
+}
+
+/** 生效温度来源：auto = 推导值，manual = 用户覆盖。 */
+export type ExpressionSource = 'auto' | 'manual'
+
+/**
+ * 服务端返回的表达温度快照（PRD 09 §6.2）。
+ * 官方角色为 `null`；自定义角色即使旧数据也会被 normalizeCharacter 回退为 auto 快照。
+ */
+export interface ExpressionView {
+  readonly mode: ExpressionMode
+  readonly temperatureOverride: number | null
+  readonly autoTemperature: number
+  readonly effectiveTemperature: number
+  readonly source: ExpressionSource
+  readonly explanation: readonly string[]
+}
+
 export const OFFICIAL_COPY_PERSONALITY: PersonalityConfig = {
   ...DEFAULT_PERSONALITY,
   archetype: 'gentle',
@@ -388,6 +426,8 @@ export interface CharacterView {
   readonly avatarConfig: AvatarConfig
   readonly personality: PersonalityConfig | null
   readonly family: FamilyConfig | null
+  /** 官方角色为 null；自定义角色是服务端推导后的快照。 */
+  readonly expression: ExpressionView | null
   readonly version: number
   readonly createdAt: string
   readonly updatedAt: string
@@ -400,6 +440,7 @@ export interface CharacterDraft {
   readonly avatarConfig: AvatarConfig
   readonly personality: PersonalityConfig
   readonly family: FamilyConfig
+  readonly expression: ExpressionConfig
 }
 
 export const EMPTY_DRAFT: CharacterDraft = {
@@ -408,7 +449,8 @@ export const EMPTY_DRAFT: CharacterDraft = {
   intro: '',
   avatarConfig: DEFAULT_AVATAR,
   personality: DEFAULT_PERSONALITY,
-  family: DEFAULT_FAMILY
+  family: DEFAULT_FAMILY,
+  expression: DEFAULT_EXPRESSION
 }
 
 export interface CharacterTemplate {
@@ -449,7 +491,8 @@ export const CHARACTER_TEMPLATES: readonly CharacterTemplate[] = [
         archetype: 'gentle',
         modifiers: ['attentive']
       },
-      family: { growth: 'small-town', relations: 'close', economy: 'ordinary', extraNote: '' }
+      family: { growth: 'small-town', relations: 'close', economy: 'ordinary', extraNote: '' },
+      expression: DEFAULT_EXPRESSION
     }
   },
   {
@@ -473,7 +516,8 @@ export const CHARACTER_TEMPLATES: readonly CharacterTemplate[] = [
         modifiers: ['soft-tsundere', 'attentive'],
         addressUser: '笨蛋'
       },
-      family: { growth: 'city', relations: 'close', economy: 'comfortable', extraNote: '' }
+      family: { growth: 'city', relations: 'close', economy: 'comfortable', extraNote: '' },
+      expression: DEFAULT_EXPRESSION
     }
   },
   {
@@ -498,7 +542,8 @@ export const CHARACTER_TEMPLATES: readonly CharacterTemplate[] = [
         initiative: 'high',
         intensity: 'high'
       },
-      family: { growth: 'county', relations: 'polite', economy: 'ordinary', extraNote: '' }
+      family: { growth: 'county', relations: 'polite', economy: 'ordinary', extraNote: '' },
+      expression: DEFAULT_EXPRESSION
     }
   },
   {
@@ -523,7 +568,8 @@ export const CHARACTER_TEMPLATES: readonly CharacterTemplate[] = [
         intensity: 'low',
         initiative: 'low'
       },
-      family: { growth: 'city', relations: 'apart', economy: 'comfortable', extraNote: '' }
+      family: { growth: 'city', relations: 'apart', economy: 'comfortable', extraNote: '' },
+      expression: DEFAULT_EXPRESSION
     }
   }
 ]
@@ -535,6 +581,8 @@ export interface CharacterInput {
   readonly avatarConfig: AvatarConfig
   readonly personality: PersonalityConfig
   readonly family: FamilyConfig
+  /** 创建/更新请求携带；PATCH 语义由后端决定（null 表示不修改，本字段始终有值）。 */
+  readonly expression: ExpressionConfig
   readonly sourceCharacterId?: string
 }
 
@@ -604,7 +652,31 @@ export function validateCharacterDraft(
     errors.modifiers = '“独立”和“黏人”不能同时选择。'
   }
 
+  const expressionError = validateExpressionConfig(draft.expression)
+  if (expressionError !== null) {
+    errors.expression = expressionError
+  }
+
   return { ok: Object.keys(errors).length === 0, errors }
+}
+
+/** 前端预校验（范围 0.30–1.20）；服务端仍会以 CHARACTER_EXPRESSION_INVALID 兜底。 */
+export function validateExpressionConfig(expression: ExpressionConfig): string | null {
+  if (expression.mode !== 'auto' && expression.mode !== 'manual') {
+    return '表达温度设置不合法，请重试。'
+  }
+  if (expression.mode === 'manual') {
+    const override = expression.temperatureOverride
+    if (
+      override === null ||
+      !Number.isFinite(override) ||
+      override < EXPRESSION_TEMPERATURE_MIN ||
+      override > EXPRESSION_TEMPERATURE_MAX
+    ) {
+      return `表达温度需在 ${EXPRESSION_TEMPERATURE_MIN.toFixed(2)}–${EXPRESSION_TEMPERATURE_MAX.toFixed(2)} 之间。`
+    }
+  }
+  return null
 }
 
 export function draftToInput(draft: CharacterDraft): CharacterInput {
@@ -620,7 +692,8 @@ export function draftToInput(draft: CharacterDraft): CharacterInput {
     family: {
       ...draft.family,
       extraNote: draft.family.extraNote.trim()
-    }
+    },
+    expression: normalizeExpressionConfig(draft.expression)
   }
 }
 
@@ -636,7 +709,9 @@ export function characterToDraft(character: CharacterView): CharacterDraft {
     intro: character.intro,
     avatarConfig: character.avatarConfig,
     personality: character.personality ?? (isOfficial ? OFFICIAL_COPY_PERSONALITY : DEFAULT_PERSONALITY),
-    family: character.family ?? DEFAULT_FAMILY
+    family: character.family ?? DEFAULT_FAMILY,
+    /* 官方角色 expression 恒为 null；旧自定义角色缺失时回退 auto，不阻塞编辑 */
+    expression: normalizeExpressionConfig(character.expression)
   }
 }
 
@@ -659,6 +734,8 @@ export function isSameDraft(left: CharacterDraft, right: CharacterDraft): boolea
     left.family.relations === right.family.relations &&
     left.family.economy === right.family.economy &&
     left.family.extraNote === right.family.extraNote &&
+    left.expression.mode === right.expression.mode &&
+    left.expression.temperatureOverride === right.expression.temperatureOverride &&
     isSameAvatar(left.avatarConfig, right.avatarConfig)
   )
 }
@@ -731,6 +808,96 @@ export function normalizeFamily(value: unknown): FamilyConfig {
   }
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * 收敛创建/更新用的 expression 配置（PRD 09 §6.1）：
+ * 缺失/null/空对象 → auto；manual 缺合法 override → 回退 auto，绝不静默改范围。
+ */
+export function normalizeExpressionConfig(value: unknown): ExpressionConfig {
+  if (!isRecord(value)) {
+    return DEFAULT_EXPRESSION
+  }
+  const mode: ExpressionMode = value.mode === 'manual' ? 'manual' : 'auto'
+  if (mode === 'auto') {
+    return DEFAULT_EXPRESSION
+  }
+  const override = value.temperatureOverride
+  if (
+    typeof override !== 'number' ||
+    !Number.isFinite(override) ||
+    override < EXPRESSION_TEMPERATURE_MIN ||
+    override > EXPRESSION_TEMPERATURE_MAX
+  ) {
+    return DEFAULT_EXPRESSION
+  }
+  return { mode: 'manual', temperatureOverride: roundTemperature(override) }
+}
+
+/**
+ * 收敛服务端 expression 快照；结构不可用（缺自动值）时返回 null，
+ * 由 normalizeCharacter 按性格与形象重建 auto 快照。
+ */
+export function normalizeExpressionView(value: unknown): ExpressionView | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const autoRaw = value.autoTemperature
+  if (typeof autoRaw !== 'number' || !Number.isFinite(autoRaw)) {
+    return null
+  }
+  const autoTemperature = roundTemperature(
+    clampNumber(autoRaw, EXPRESSION_AUTO_MIN, EXPRESSION_AUTO_MAX)
+  )
+
+  const overrideRaw = value.temperatureOverride
+  const overrideValid =
+    value.mode === 'manual' &&
+    typeof overrideRaw === 'number' &&
+    Number.isFinite(overrideRaw) &&
+    overrideRaw >= EXPRESSION_TEMPERATURE_MIN &&
+    overrideRaw <= EXPRESSION_TEMPERATURE_MAX
+  const mode: ExpressionMode = overrideValid ? 'manual' : 'auto'
+  const temperatureOverride = overrideValid ? roundTemperature(overrideRaw) : null
+
+  /*
+   * 生效值由 mode 决定（§6.2）：manual 用校验通过的 override，auto 用自动值。
+   * 旧响应或脏数据缺 effectiveTemperature 也能得到一致结果。
+   */
+  const effectiveTemperature =
+    mode === 'manual' && temperatureOverride !== null ? temperatureOverride : autoTemperature
+
+  const explanation = Array.isArray(value.explanation)
+    ? value.explanation.filter((item): item is string => typeof item === 'string')
+    : []
+
+  return {
+    mode,
+    temperatureOverride,
+    autoTemperature,
+    effectiveTemperature,
+    source: mode,
+    explanation
+  }
+}
+
+function autoExpressionView(
+  personality: PersonalityConfig,
+  avatarConfig: AvatarConfig
+): ExpressionView {
+  const { autoTemperature, explanation } = calculateExpressionTemperature(personality, avatarConfig)
+  return {
+    mode: 'auto',
+    temperatureOverride: null,
+    autoTemperature,
+    effectiveTemperature: autoTemperature,
+    source: 'auto',
+    explanation
+  }
+}
+
 export function normalizeCharacter(value: unknown): CharacterView | null {
   if (!isRecord(value)) {
     return null
@@ -743,19 +910,32 @@ export function normalizeCharacter(value: unknown): CharacterView | null {
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((item): item is string => typeof item === 'string')
     : []
+  const isOfficial = value.isOfficial === true
+  const avatarConfig = normalizeAvatar(value.avatarConfig)
+  const personality =
+    value.personality == null ? null : normalizePersonality(value.personality)
+  /*
+   * 官方角色 expression 恒为 null（使用用户级温度）；自定义角色遇到旧数据缺失
+   * expression 时按当前性格与形象回退 auto，保证编辑器不会崩溃或越界。
+   */
+  const expression = isOfficial
+    ? null
+    : normalizeExpressionView(value.expression) ??
+      autoExpressionView(personality ?? DEFAULT_PERSONALITY, avatarConfig)
   return {
     id,
     code: typeof value.code === 'string' ? value.code : '',
     displayName,
-    isOfficial: value.isOfficial === true,
+    isOfficial,
     isActive: value.isActive === true,
     status: value.status === 'archived' ? 'archived' : 'active',
     age: typeof value.age === 'number' && Number.isFinite(value.age) ? value.age : 23,
     intro: typeof value.intro === 'string' ? value.intro : '',
     tags,
-    avatarConfig: normalizeAvatar(value.avatarConfig),
-    personality: value.personality == null ? null : normalizePersonality(value.personality),
+    avatarConfig,
+    personality,
     family: value.family == null ? null : normalizeFamily(value.family),
+    expression,
     version: typeof value.version === 'number' && Number.isFinite(value.version) ? value.version : 0,
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
     updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : ''

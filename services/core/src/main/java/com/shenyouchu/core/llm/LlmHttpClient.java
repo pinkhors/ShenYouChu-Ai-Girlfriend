@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,10 +22,39 @@ import java.util.Map;
 public class LlmHttpClient {
 
     public String complete(EffectiveLlmConfig config, String systemPrompt, String userText) {
-        return complete(config, systemPrompt, userText, config.maxTokens());
+        return complete(config, systemPrompt, userText, config.maxTokens(), config.temperature());
     }
 
     public String complete(EffectiveLlmConfig config, String systemPrompt, String userText, int maxTokens) {
+        return complete(config, systemPrompt, userText, maxTokens, config.temperature());
+    }
+
+    /**
+     * 带独立上下文的三段式调用（文档 09 §8.6）：system → context → user。
+     *
+     * <p>context 为空时等价于旧方法，保持既有行为；context 非空时作为独立
+     * system message 发送，绝不拼进用户本轮发言。
+     */
+    public String complete(EffectiveLlmConfig config, String systemPrompt, String context,
+                           String userText, int maxTokens, double temperature) {
+        if (context == null || context.isBlank()) {
+            /* 走旧入口，保持既有子类覆写与降级路径不变 */
+            return complete(config, systemPrompt, userText, maxTokens, temperature);
+        }
+        return execute(config, systemPrompt, context, userText, maxTokens, temperature);
+    }
+
+    /**
+     * 带显式采样温度的实现（文档 09 §7）：temperature 由角色表达温度决定，
+     * 而不是用户级配置；其余字段仍来自 {@code config}。
+     */
+    public String complete(EffectiveLlmConfig config, String systemPrompt, String userText,
+                           int maxTokens, double temperature) {
+        return execute(config, systemPrompt, null, userText, maxTokens, temperature);
+    }
+
+    private String execute(EffectiveLlmConfig config, String systemPrompt, String context,
+                           String userText, int maxTokens, double temperature) {
         if (!config.usable()) {
             throw new IllegalStateException("LLM 未启用或缺少 Base URL/模型");
         }
@@ -43,7 +73,7 @@ public class LlmHttpClient {
         }
 
         JsonNode response = request
-                .body(buildBody(config.model(), systemPrompt, userText, maxTokens, config.temperature()))
+                .body(buildBody(config.model(), systemPrompt, context, userText, maxTokens, temperature))
                 .retrieve()
                 .body(JsonNode.class);
 
@@ -105,11 +135,26 @@ public class LlmHttpClient {
     /** 请求体保持最小字段，便于测试与不同供应商兼容。 */
     public static Map<String, Object> buildBody(String model, String systemPrompt, String userText,
                                                 int maxTokens, double temperature) {
+        return buildBody(model, systemPrompt, null, userText, maxTokens, temperature);
+    }
+
+    /**
+     * 三段式请求体：system →（context 非空时）system → user。
+     *
+     * <p>顺序有语义：上下文必须独立成 system message，模型才不会把它当成
+     * 用户刚说的话或新的指令。
+     */
+    public static Map<String, Object> buildBody(String model, String systemPrompt, String context,
+                                                String userText, int maxTokens, double temperature) {
+        List<Map<String, String>> messages = new ArrayList<>(3);
+        messages.add(Map.of("role", "system", "content", systemPrompt));
+        if (context != null && !context.isBlank()) {
+            messages.add(Map.of("role", "system", "content", context));
+        }
+        messages.add(Map.of("role", "user", "content", userText));
         return Map.of(
                 "model", model,
-                "messages", List.of(
-                        Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userText)),
+                "messages", List.copyOf(messages),
                 "max_tokens", maxTokens,
                 "temperature", temperature);
     }

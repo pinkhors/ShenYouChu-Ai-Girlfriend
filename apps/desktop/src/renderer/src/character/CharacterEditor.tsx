@@ -625,10 +625,15 @@ export default function CharacterEditor({
                 {tab === 'personality' && (
                   <PersonalityPanel
                     value={draft.personality}
+                    avatarConfig={draft.avatarConfig}
+                    expression={draft.expression}
                     errors={validation.errors}
                     readOnly={isOfficial}
                     onChange={(personality) => {
                       patch({ personality })
+                    }}
+                    onExpressionChange={(expression) => {
+                      patch({ expression })
                     }}
                   />
                 )}

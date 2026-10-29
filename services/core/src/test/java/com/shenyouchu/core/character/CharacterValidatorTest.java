@@ -1,6 +1,7 @@
 package com.shenyouchu.core.character;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shenyouchu.core.character.dto.ExpressionConfig;
 import com.shenyouchu.core.character.dto.FamilyView;
 import com.shenyouchu.core.character.dto.PersonalityView;
 import com.shenyouchu.core.common.ApiException;
@@ -154,5 +155,42 @@ class CharacterValidatorTest {
                 .isEqualTo("CHARACTER_CONFIRM_MISMATCH");
         assertThatCode(() -> validator.requireConfirmName("林晚", " 林晚 "))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void expressionConfigIsNormalized() {
+        assertThat(validator.normalizeExpression(null)).isEqualTo(ExpressionConfig.auto());
+        assertThat(validator.normalizeExpression(new ExpressionConfig(null, null)))
+                .isEqualTo(ExpressionConfig.auto());
+        /* auto 时忽略并清空 override */
+        assertThat(validator.normalizeExpression(new ExpressionConfig("auto", 0.9)))
+                .isEqualTo(new ExpressionConfig("auto", null));
+        /* 数值四舍五入到 2 位；mode 大小写归一 */
+        assertThat(validator.normalizeExpression(new ExpressionConfig("MANUAL", 0.923)))
+                .isEqualTo(new ExpressionConfig("manual", 0.92));
+        assertThat(validator.normalizeExpression(new ExpressionConfig(" manual ", 0.30)))
+                .isEqualTo(new ExpressionConfig("manual", 0.30));
+        assertThat(validator.normalizeExpression(new ExpressionConfig("manual", 1.20)))
+                .isEqualTo(new ExpressionConfig("manual", 1.20));
+    }
+
+    @Test
+    void invalidExpressionConfigReturnsStableCode() {
+        assertExpressionInvalid(new ExpressionConfig("boost", null));
+        assertExpressionInvalid(new ExpressionConfig("manual", null));
+        assertExpressionInvalid(new ExpressionConfig("manual", 0.29));
+        assertExpressionInvalid(new ExpressionConfig("manual", 1.21));
+        assertExpressionInvalid(new ExpressionConfig("manual", Double.NaN));
+        assertExpressionInvalid(new ExpressionConfig("manual", Double.POSITIVE_INFINITY));
+    }
+
+    private void assertExpressionInvalid(ExpressionConfig config) {
+        assertThatThrownBy(() -> validator.normalizeExpression(config))
+                .isInstanceOf(ApiException.class)
+                .satisfies(ex -> {
+                    ApiException api = (ApiException) ex;
+                    assertThat(api.getCode()).isEqualTo("CHARACTER_EXPRESSION_INVALID");
+                    assertThat(api.getStatus().value()).isEqualTo(400);
+                });
     }
 }

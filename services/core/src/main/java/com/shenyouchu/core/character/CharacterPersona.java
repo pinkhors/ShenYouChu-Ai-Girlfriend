@@ -3,6 +3,7 @@ package com.shenyouchu.core.character;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shenyouchu.core.character.dto.ExpressionConfig;
 import com.shenyouchu.core.character.dto.FamilyView;
 import com.shenyouchu.core.character.dto.PersonalityView;
 
@@ -23,15 +24,32 @@ public final class CharacterPersona {
     private CharacterPersona() {
     }
 
-    /** 生成 v2 人设 JSON。 */
+    /** 生成 v2 人设 JSON；expression 缺省（null）时写入 auto。 */
     public static String toJson(ObjectMapper objectMapper, int age, String intro,
                                 PersonalityView personality, FamilyView family) {
+        return toJson(objectMapper, age, intro, personality, family, null);
+    }
+
+    /**
+     * 生成 v2 人设 JSON（含表达温度配置）。
+     *
+     * @param expression 表达温度配置；{@code null} 视为 {@code {mode: auto, temperatureOverride: null}}
+     */
+    public static String toJson(ObjectMapper objectMapper, int age, String intro,
+                                PersonalityView personality, FamilyView family,
+                                ExpressionConfig expression) {
+        ExpressionConfig config = expression == null ? ExpressionConfig.auto() : expression;
+        Map<String, Object> expressionNode = new LinkedHashMap<>();
+        expressionNode.put("mode", config.mode() == null ? ExpressionConfig.MODE_AUTO : config.mode());
+        expressionNode.put("temperatureOverride", config.temperatureOverride());
+
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("schemaVersion", SCHEMA_VERSION);
         root.put("age", age);
         root.put("intro", intro == null ? "" : intro);
         root.put("personality", personality);
         root.put("family", family);
+        root.put("expression", expressionNode);
         try {
             return objectMapper.writeValueAsString(root);
         } catch (JsonProcessingException ex) {
@@ -78,6 +96,32 @@ public final class CharacterPersona {
             return null;
         }
         return familyNode(persona.get("family"));
+    }
+
+    /**
+     * 解析表达温度配置（文档 09 §6.1）。
+     *
+     * <p>缺失、{@code null}、非对象或缺少 mode 都回退到 auto；manual 保留 override，
+     * 数值合法性由 {@code CharacterValidator.normalizeExpression} 统一校验。
+     */
+    public static ExpressionConfig expression(JsonNode persona) {
+        if (persona == null || !persona.isObject()) {
+            return ExpressionConfig.auto();
+        }
+        JsonNode node = persona.get("expression");
+        if (node == null || !node.isObject()) {
+            return ExpressionConfig.auto();
+        }
+        String mode = text(node, "mode");
+        if (mode == null || mode.isBlank()) {
+            return ExpressionConfig.auto();
+        }
+        Double override = null;
+        JsonNode overrideNode = node.get("temperatureOverride");
+        if (overrideNode != null && overrideNode.isNumber()) {
+            override = overrideNode.asDouble();
+        }
+        return new ExpressionConfig(mode, override);
     }
 
     public static PersonalityView personalityNode(JsonNode node) {

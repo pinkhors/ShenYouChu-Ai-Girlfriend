@@ -3,7 +3,8 @@ import {
   normalizeCharacter,
   type CharacterInput,
   type CharacterUpdateInput,
-  type CharacterView
+  type CharacterView,
+  type ExpressionConfig
 } from './characterTypes'
 
 /**
@@ -82,7 +83,12 @@ export async function updateCharacter(
 
 export async function duplicateCharacter(
   id: string,
-  input: { displayName?: string; avatarConfig?: unknown } = {}
+  input: {
+    displayName?: string
+    avatarConfig?: unknown
+    /** 省略时由后端复制原角色的 expression 配置。 */
+    expression?: ExpressionConfig
+  } = {}
 ): Promise<CharacterView | null> {
   const raw = await request<unknown>(`/characters/${encodeURIComponent(id)}/duplicate`, {
     method: 'POST',

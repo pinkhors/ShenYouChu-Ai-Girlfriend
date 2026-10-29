@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode
@@ -11,11 +12,13 @@ import {
 import {
   ApiError,
   listMessages,
+  triggerProactive,
   type CharacterState,
   type Conversation,
   type Message
 } from './api/client'
 import type { CharacterView } from './character/characterTypes'
+import { bubbleDelayMs, splitIntoBubbles } from './chat/bubbles'
 import { prependOlderMessages } from './chat/messagePages'
 import {
   getPendingMessages,
@@ -49,7 +52,57 @@ interface ChatViewProps {
   readonly reloadToken: number
 }
 
+/** 本次会话新增助手消息的揭示进度；shown=0 时只显示“正在输入…”。 */
+interface BubbleReveal {
+  readonly bubbles: string[]
+  readonly shown: number
+}
+
+/*
+ * 同一 <li> 内的 1–3 个气泡纵向排列。styles.css 不在本次改动范围内，
+ * 这里用最小内联样式保证多气泡是竖排而不是横排。
+ */
+const BUBBLE_STACK_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: '6px',
+  maxWidth: 'min(62%, 560px)'
+}
+
+/** 单个气泡在气泡栈内占满可用宽度（覆盖 styles.css 的百分比上限）。 */
+const BUBBLE_IN_STACK_STYLE: CSSProperties = {
+  maxWidth: '100%'
+}
+
 const SUGGESTIONS = ['今天有点累，想和你说说话', '你还记得我喜欢什么吗？', '给我讲个睡前故事吧']
+
+/** 窄屏（与 styles.css 的 960px 断点保持同一意图）只留图标，文案进 title。 */
+const COMPACT_HEADER_QUERY = '(max-width: 760px)'
+
+/** 主动开口阻塞文案（PRD 09 §11）；未知错误退回后端的 message。 */
+const PROACTIVE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  PROACTIVE_PRIVACY_DISABLED: '她尊重你的隐私设置，暂时不会主动打扰',
+  PROACTIVE_USER_BUSY: '你现在不方便，她先不打扰',
+  PROACTIVE_NO_HISTORY: '先和她说句话吧',
+  PROACTIVE_QUIET_HOURS: '她现在在休息，明天早上再来找你',
+  PROACTIVE_UNANSWERED_LIMIT: '你已经有一阵没回她了，先陪她说句话吧',
+  PROACTIVE_DAILY_LIMIT: '她今天已经主动找过你了，留点话明天说',
+  PROACTIVE_USER_JUST_REPLIED: '她还在听你说，不用急着让她开口',
+  PROACTIVE_COOLDOWN: '她刚说过话，等一会儿再让她开口',
+  PROACTIVE_SUPPRESSED: '她想了想，还是决定不打扰你',
+  PROACTIVE_GENERATION_FAILED: '她这会儿有点走神，稍后再试'
+}
+
+function proactiveErrorMessageOf(error: unknown): string {
+  if (error instanceof ApiError) {
+    const mapped = PROACTIVE_ERROR_MESSAGES[error.code]
+    if (mapped !== undefined) {
+      return mapped
+    }
+  }
+  return toMessage(error)
+}
 
 function toMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -84,10 +137,111 @@ export default function ChatView({
   const [heroFailed, setHeroFailed] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [isProactiveSending, setIsProactiveSending] = useState(false)
+  const [compactHeader, setCompactHeader] = useState(
+    () => window.matchMedia(COMPACT_HEADER_QUERY).matches
+  )
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const stickToBottomRef = useRef(true)
   /* 回源请求序号：并发回源时只接受最后一次响应 */
   const loadSeqRef = useRef(0)
+  /*
+   * 气泡级节奏（PRD 09 §5.4）：只有本次会话新到达的助手消息才逐条揭示。
+   * knownMessageIdsRef 记录已经见过的消息 id，hydratedRef 标记本会话是否已完成首次回源；
+   * 首次加载/切换会话回源时一次性完整渲染，不重播动画。
+   */
+  const [reveals, setReveals] = useState<Record<string, BubbleReveal>>({})
+  const revealTimersRef = useRef<Map<string, number>>(new Map())
+  const knownMessageIdsRef = useRef<Set<string>>(new Set())
+  const hydratedRef = useRef(false)
+  /* 渲染期同步的发送态，供异步回源回调判断“新一轮是否已在生成” */
+  const isSendingRef = useRef(false)
+
+  const clearRevealTimer = useCallback((id: string): void => {
+    const timer = revealTimersRef.current.get(id)
+    if (timer !== undefined) {
+      window.clearTimeout(timer)
+      revealTimersRef.current.delete(id)
+    }
+  }, [])
+
+  /** 按 bubbleDelayMs 依次揭示下一个气泡；每揭示一个都要重新显示“正在输入…”。 */
+  const scheduleReveal = useCallback(
+    (id: string, bubbles: readonly string[], nextIndex: number): void => {
+      if (nextIndex >= bubbles.length) {
+        return
+      }
+      clearRevealTimer(id)
+      const delay = bubbleDelayMs(bubbles[nextIndex] ?? '', nextIndex)
+      const timer = window.setTimeout(() => {
+        revealTimersRef.current.delete(id)
+        setReveals((previous) => {
+          const current = previous[id]
+          if (current === undefined) {
+            /* 已被“立即补全”取消 */
+            return previous
+          }
+          return {
+            ...previous,
+            [id]: {
+              bubbles: current.bubbles,
+              shown: Math.min(current.bubbles.length, nextIndex + 1)
+            }
+          }
+        })
+        scheduleReveal(id, bubbles, nextIndex + 1)
+      }, delay)
+      revealTimersRef.current.set(id, timer)
+    },
+    [clearRevealTimer]
+  )
+
+  const startReveal = useCallback(
+    (id: string, content: string): void => {
+      /*
+       * 新一轮已经在流式生成（例如回源响应晚于用户的下一次发送）：
+       * 直接完整展示，避免和流式气泡同时出现两个“正在输入…”。
+       */
+      if (isSendingRef.current) {
+        return
+      }
+      const bubbles = splitIntoBubbles(content)
+      if (bubbles.length === 0) {
+        return
+      }
+      clearRevealTimer(id)
+      setReveals((previous) => ({ ...previous, [id]: { bubbles, shown: 0 } }))
+      scheduleReveal(id, bubbles, 0)
+    },
+    [clearRevealTimer, scheduleReveal]
+  )
+
+  /** 立即补全所有未揭示气泡（用户发消息、让她先开口、切换会话、停止生成）。 */
+  const completeReveals = useCallback((): void => {
+    for (const timer of revealTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+    revealTimersRef.current.clear()
+    setReveals((previous) => (Object.keys(previous).length === 0 ? previous : {}))
+  }, [])
+
+  /* 切换会话：已见集合与揭示进度归零，重新进来的消息按历史一次性渲染 */
+  useEffect(() => {
+    knownMessageIdsRef.current = new Set()
+    hydratedRef.current = false
+    completeReveals()
+  }, [conversation.id, completeReveals])
+
+  /* 卸载时清掉计时器，避免回调落在已卸载组件上 */
+  useEffect(
+    () => () => {
+      for (const timer of revealTimersRef.current.values()) {
+        window.clearTimeout(timer)
+      }
+      revealTimersRef.current.clear()
+    },
+    []
+  )
 
   /*
    * 占位消息存放在模块级 store 里（按会话 id），不随 ChatView 卸载丢失：
@@ -104,6 +258,7 @@ export default function ChatView({
   const turn = useSyncExternalStore(subscribeTurnSessions, turnSnapshot)
   const streamingText = turn.streamingText
   const isSending = turn.isSending
+  isSendingRef.current = isSending
 
   const load = useCallback(async () => {
     /* 请求序号：挂载、reloadToken、回合结束可能并发触发回源，只认最后一次响应 */
@@ -115,6 +270,19 @@ export default function ChatView({
       if (loadSeqRef.current !== requestId) {
         return
       }
+      const known = knownMessageIdsRef.current
+      const isFirstHydration = !hydratedRef.current
+      hydratedRef.current = true
+      /*
+       * 只有本次会话新增的助手消息才逐条揭示；首次回源（含切换会话后）视为历史，
+       * 一次性完整渲染，避免每次打开会话都重播动画。
+       */
+      const freshAssistant = isFirstHydration
+        ? []
+        : page.items.filter((item) => item.role === 'assistant' && !known.has(item.id))
+      for (const item of page.items) {
+        known.add(item.id)
+      }
       setMessages(page.items)
       /* 服务端已落库的消息会顶替本地占位，避免重复展示 */
       reconcilePendingMessages(conversation.id, page.items)
@@ -122,6 +290,9 @@ export default function ChatView({
       setError(null)
       /* 已结束回合的流式文本已由服务端消息接替，清空残留（错误提示保留） */
       clearSettledTurn(conversation.id)
+      for (const item of freshAssistant) {
+        startReveal(item.id, item.content)
+      }
     } catch (loadError) {
       if (loadSeqRef.current !== requestId) {
         return
@@ -132,11 +303,23 @@ export default function ChatView({
         setIsLoading(false)
       }
     }
-  }, [conversation.id])
+  }, [conversation.id, startReveal])
 
   useEffect(() => {
     void load()
   }, [load, reloadToken])
+
+  useEffect(() => {
+    const query = window.matchMedia(COMPACT_HEADER_QUERY)
+    const sync = (): void => {
+      setCompactHeader(query.matches)
+    }
+    sync()
+    query.addEventListener('change', sync)
+    return () => {
+      query.removeEventListener('change', sync)
+    }
+  }, [])
 
   /*
    * 服务端未落库就失败的发送：把正文回填输入框，避免“消息消失还得重新打字”。
@@ -151,6 +334,7 @@ export default function ChatView({
     consumeFailedText(conversation.id)
   }, [failedText, conversation.id])
 
+  /* 揭示新气泡时同样沿用好“贴底”逻辑自动滚到底部 */
   useEffect(() => {
     if (!stickToBottomRef.current) {
       /* 正在向上翻更早的消息，不要被拉回底部 */
@@ -158,7 +342,14 @@ export default function ChatView({
       return
     }
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, pending, streamingText, isSending])
+  }, [messages, pending, streamingText, isSending, reveals])
+
+  /* 新一轮开始（发送/重试）时立即补全旧气泡，不让动画挡住输入 */
+  useEffect(() => {
+    if (isSending) {
+      completeReveals()
+    }
+  }, [isSending, completeReveals])
 
   const handleLoadMore = async (): Promise<void> => {
     if (nextCursor === null || isLoadingMore) {
@@ -189,6 +380,8 @@ export default function ChatView({
     if (text === '' || isSending) {
       return
     }
+    /* 用户发新消息：先把未揭示的气泡补全，不把用户卡在上一轮动画里 */
+    completeReveals()
     /*
      * 整轮交给模块级 store：占位消息在 store 内部登记，SSE 与停止按钮都不再依赖
      * 组件是否挂载；结束后的回源由应用层订阅 store 触发。
@@ -202,7 +395,34 @@ export default function ChatView({
   }
 
   const handleStop = (): void => {
+    /* 停止生成：补全未揭示气泡，避免残留计时器在停止后继续冒气泡 */
+    completeReveals()
     stopTurn(conversation.id)
+  }
+
+  /**
+   * 让她先开口：成功先本地追加（即时可见），再回源对齐服务端消息；
+   * 409/502 按 PRD 09 §11 映射成行内提示，不弹模态。
+   */
+  const handleProactive = async (): Promise<void> => {
+    if (isProactiveSending || isSending) {
+      return
+    }
+    setIsProactiveSending(true)
+    setError(null)
+    /* 点击“让她先开口”：先补全上一轮未揭示的气泡 */
+    completeReveals()
+    try {
+      const proactive = await triggerProactive(conversation.id)
+      knownMessageIdsRef.current.add(proactive.id)
+      setMessages((previous) => [...previous, proactive])
+      startReveal(proactive.id, proactive.content)
+      await load()
+    } catch (proactiveError) {
+      setError(proactiveErrorMessageOf(proactiveError))
+    } finally {
+      setIsProactiveSending(false)
+    }
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -257,6 +477,27 @@ export default function ChatView({
               </>
             )}
           </div>
+          <button
+            className="chat__call chat__proactive"
+            type="button"
+            title="让她先开口"
+            aria-label="让她先开口"
+            aria-busy={isProactiveSending}
+            disabled={isProactiveSending || isSending}
+            style={
+              isProactiveSending || isSending
+                ? { cursor: 'progress', opacity: 0.55 }
+                : undefined
+            }
+            onClick={() => {
+              void handleProactive()
+            }}
+          >
+            <Icon name="sparkles" size={17} />
+            {!compactHeader && (
+              <span>{isProactiveSending ? '她正在想…' : '让她先开口'}</span>
+            )}
+          </button>
           <button className="chat__call" type="button" onClick={onCall}>
             <Icon name="phone" size={17} />
             通话
@@ -342,6 +583,14 @@ export default function ChatView({
             {timeline.map((message) => {
               const isUser = message.role === 'user'
               const isPending = pendingIds.has(message.id)
+              const reveal = isUser ? undefined : reveals[message.id]
+              const bubbles = isUser
+                ? [message.content]
+                : reveal !== undefined
+                  ? reveal.bubbles.slice(0, reveal.shown)
+                  : splitIntoBubbles(message.content)
+              /* 揭示中（含 shown=0 的“正在输入…”）不显示时间，只在最后一个可见气泡上显示 */
+              const isRevealing = reveal !== undefined && reveal.shown < reveal.bubbles.length
               return (
                 <li
                   className={`${isUser ? 'message message--user' : 'message message--assistant'}${
@@ -363,12 +612,47 @@ export default function ChatView({
                       />
                     </span>
                   )}
-                  <div className={isUser ? 'bubble bubble--user' : 'bubble bubble--assistant'}>
-                    <p className="bubble__text">{message.content}</p>
-                    <span className="bubble__time" title={formatTime(message.createdAt)}>
-                      {formatClock(message.createdAt)}
-                    </span>
-                  </div>
+                  {isUser ? (
+                    /* 用户消息保持单气泡 */
+                    <div className="bubble bubble--user">
+                      <p className="bubble__text">{message.content}</p>
+                      <span className="bubble__time" title={formatTime(message.createdAt)}>
+                        {formatClock(message.createdAt)}
+                      </span>
+                    </div>
+                  ) : (
+                    /* 助手消息：同一 <li> 内纵向排列 1–3 个气泡 */
+                    <div className="message__bubbles" style={BUBBLE_STACK_STYLE}>
+                      {bubbles.map((text, index) => (
+                        <div
+                          className="bubble bubble--assistant"
+                          style={BUBBLE_IN_STACK_STYLE}
+                          key={`${message.id}-${index}`}
+                        >
+                          <p className="bubble__text">{text}</p>
+                          {index === bubbles.length - 1 && !isRevealing && (
+                            <span className="bubble__time" title={formatTime(message.createdAt)}>
+                              {formatClock(message.createdAt)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {isRevealing && (
+                        <div
+                          className="bubble bubble--assistant bubble--typing"
+                          style={BUBBLE_IN_STACK_STYLE}
+                          role="status"
+                          aria-label={`${character.displayName}正在输入…`}
+                        >
+                          <span className="typing" aria-hidden="true">
+                            <i />
+                            <i />
+                            <i />
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </li>
               )
             })}

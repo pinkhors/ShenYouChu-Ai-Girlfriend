@@ -11,6 +11,7 @@ import com.shenyouchu.core.character.dto.CharacterPurgeResult;
 import com.shenyouchu.core.character.dto.CharacterView;
 import com.shenyouchu.core.character.dto.CreateCharacterRequest;
 import com.shenyouchu.core.character.dto.DuplicateCharacterRequest;
+import com.shenyouchu.core.character.dto.ExpressionConfig;
 import com.shenyouchu.core.character.dto.FamilyView;
 import com.shenyouchu.core.character.dto.PersonalityView;
 import com.shenyouchu.core.character.dto.UpdateCharacterRequest;
@@ -67,6 +68,7 @@ public class CharacterService {
     private final CharacterValidator validator;
     private final ObjectMapper objectMapper;
     private final IdentifierGenerator identifierGenerator;
+    private final CharacterExpressionService expressionService;
 
     public CharacterService(CharacterMapper characterMapper,
                             UserPreferenceMapper preferenceMapper,
@@ -78,7 +80,8 @@ public class CharacterService {
                             ActivityService activityService,
                             CharacterValidator validator,
                             ObjectMapper objectMapper,
-                            IdentifierGenerator identifierGenerator) {
+                            IdentifierGenerator identifierGenerator,
+                            CharacterExpressionService expressionService) {
         this.characterMapper = characterMapper;
         this.preferenceMapper = preferenceMapper;
         this.conversationMapper = conversationMapper;
@@ -90,6 +93,7 @@ public class CharacterService {
         this.validator = validator;
         this.objectMapper = objectMapper;
         this.identifierGenerator = identifierGenerator;
+        this.expressionService = expressionService;
     }
 
     /** 官方 + 当前用户自定义；官方始终返回，归档只作用于自定义角色。 */
@@ -136,7 +140,7 @@ public class CharacterService {
     @Transactional
     public CharacterView create(Long userId, CreateCharacterRequest request) {
         CreateCharacterRequest input = request == null
-                ? new CreateCharacterRequest(null, null, null, null, null, null, null)
+                ? new CreateCharacterRequest(null, null, null, null, null, null, null, null)
                 : request;
         String name = validator.normalizeName(input.displayName());
         ensureNameAvailable(userId, name, null);
@@ -146,6 +150,7 @@ public class CharacterService {
         String intro = validator.normalizeIntro(input.intro());
         PersonalityView personality = validator.normalizePersonality(input.personality());
         FamilyView family = validator.normalizeFamily(input.family());
+        ExpressionConfig expression = validator.normalizeExpression(input.expression());
         String avatar = validator.normalizeAvatarConfig(input.avatarConfig());
         Long sourceCharacterId = null;
         if (input.sourceCharacterId() != null && !input.sourceCharacterId().isBlank()) {
@@ -158,7 +163,8 @@ public class CharacterService {
         character.setCode("custom-" + id);
         character.setDisplayName(name);
         character.setPersonaVersion("custom-v1");
-        character.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family));
+        character.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family,
+                expression));
         character.setAvatarConfig(avatar);
         character.setOwnerUserId(userId);
         character.setSourceCharacterId(sourceCharacterId);
@@ -200,6 +206,10 @@ public class CharacterService {
         FamilyView family = request.family() == null
                 ? existingFamily(existingPersona)
                 : validator.normalizeFamily(request.family());
+        /* PATCH 中 expression 为 null 表示沿用现有配置；显式传入才覆盖。 */
+        ExpressionConfig expression = request.expression() == null
+                ? CharacterPersona.expression(existingPersona)
+                : validator.normalizeExpression(request.expression());
         String avatar = request.avatarConfig() == null
                 ? normalizeStoredAvatar(character.getAvatarConfig())
                 : validator.normalizeAvatarConfig(request.avatarConfig());
@@ -211,7 +221,8 @@ public class CharacterService {
                 character.setDisplayName(name);
             }
         }
-        character.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family));
+        character.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family,
+                expression));
         character.setAvatarConfig(avatar);
         /* 乐观锁：只有与客户端版本一致才更新；影响行数为 0 即版本冲突。 */
         character.setVersion(request.version());
@@ -246,6 +257,10 @@ public class CharacterService {
         FamilyView family = official
                 ? CharacterCatalog.OFFICIAL_COPY_FAMILY
                 : existingFamily(persona);
+        /* 复制自定义角色保留 expression；复制官方角色回到默认 auto（官方人设只读）。 */
+        ExpressionConfig expression = official
+                ? ExpressionConfig.auto()
+                : CharacterPersona.expression(persona);
         String avatar = request != null && request.avatarConfig() != null
                 ? validator.normalizeAvatarConfig(request.avatarConfig())
                 : normalizeStoredAvatar(source.getAvatarConfig());
@@ -262,7 +277,8 @@ public class CharacterService {
         copy.setCode("custom-" + id);
         copy.setDisplayName(name);
         copy.setPersonaVersion("custom-v1");
-        copy.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family));
+        copy.setPersonaConfig(CharacterPersona.toJson(objectMapper, age, intro, personality, family,
+                expression));
         copy.setAvatarConfig(avatar);
         copy.setOwnerUserId(userId);
         copy.setSourceCharacterId(source.getId());
@@ -550,7 +566,8 @@ public class CharacterService {
                 family,
                 character.getVersion() == null ? 0L : character.getVersion(),
                 character.getCreatedAt(),
-                character.getUpdatedAt());
+                character.getUpdatedAt(),
+                expressionService.view(character));
     }
 
     private PersonalityView existingPersonality(JsonNode persona) {

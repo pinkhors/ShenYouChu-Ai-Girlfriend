@@ -279,6 +279,58 @@ export function sendTurn(conversationId: string, message: string): Promise<TurnR
   })
 }
 
+/** ===== 主动消息（PRD 09 §6.4） ===== */
+
+export type ProactiveTrigger = 'share' | 'follow_up' | 'reminder'
+
+/** 可开口性查询结果；阻塞时 reason 为稳定错误码（如 QUIET_HOURS）。 */
+export interface ProactiveEligibility {
+  readonly allowed: boolean
+  readonly reason: string | null
+  readonly scene: ProactiveTrigger | null
+  readonly dailyLimit: number
+  readonly usedToday: number
+  readonly nextEligibleAt: string | null
+}
+
+/** 主动消息落库后的视图（role=assistant，source=proactive）。 */
+export interface ProactiveMessage {
+  readonly id: string
+  readonly conversationId: string
+  readonly role: 'assistant'
+  readonly content: string
+  readonly source: 'proactive'
+  readonly trigger: ProactiveTrigger
+  readonly temperature: number
+  /** 官方角色沿用用户级配置时为 user。 */
+  readonly temperatureSource: 'auto' | 'manual' | 'user'
+  readonly createdAt: string
+}
+
+/** 查询当前会话是否允许她主动开口；按钮点击前可用于提前提示原因。 */
+export function getProactiveEligibility(conversationId: string): Promise<ProactiveEligibility> {
+  return request<ProactiveEligibility>(
+    `/conversations/${encodeURIComponent(conversationId)}/proactive/eligibility`
+  )
+}
+
+/**
+ * 让她先开口。不传 trigger 时由后端按温度与场景策略选择；
+ * 阻塞返回 409 + 稳定 code，调用方按 PRD 09 §11 映射文案。
+ */
+export function triggerProactive(
+  conversationId: string,
+  trigger?: ProactiveTrigger
+): Promise<ProactiveMessage> {
+  return request<ProactiveMessage>(
+    `/conversations/${encodeURIComponent(conversationId)}/proactive`,
+    {
+      method: 'POST',
+      body: trigger === undefined ? {} : { trigger }
+    }
+  )
+}
+
 /**
  * SSE 流式轮次：解析后端 turn.started / assistant.text.delta / turn.completed。
  * 使用 fetch + ReadableStream 而非 EventSource，因为需要 POST 请求体与 Authorization 头。

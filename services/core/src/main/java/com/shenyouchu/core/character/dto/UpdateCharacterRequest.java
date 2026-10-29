@@ -12,5 +12,6 @@ public record UpdateCharacterRequest(
         JsonNode avatarConfig,
         PersonalityView personality,
         FamilyView family,
-        Long version) {
+        Long version,
+        ExpressionConfig expression) {
 }

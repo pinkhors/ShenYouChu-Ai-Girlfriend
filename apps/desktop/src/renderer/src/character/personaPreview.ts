@@ -53,3 +53,31 @@ export function intensityLabel(value: PersonalityConfig['intensity']): string {
 export function initiativeLabel(value: PersonalityConfig['initiative']): string {
   return value === 'low' ? '慢热' : value === 'high' ? '主动' : '适中'
 }
+
+/** 温度分档（PRD 09 §5.2）：<0.6 克制 / 0.6–0.85 自然 / >0.85 灵动。 */
+export type TemperatureTone = 'restrained' | 'natural' | 'vivid'
+
+export function temperatureTone(temperature: number): TemperatureTone {
+  if (temperature < 0.6) {
+    return 'restrained'
+  }
+  if (temperature > 0.85) {
+    return 'vivid'
+  }
+  return 'natural'
+}
+
+/**
+ * “她主动开场”的本地风格模板：只按温度分档换语气，不代表真实生成内容。
+ * 保持与列表里其他示例一致的“风格示例，实际对话由模型生成”定位。
+ */
+const PROACTIVE_OPENINGS: Readonly<Record<TemperatureTone, string>> = {
+  restrained: '今天没什么事，就是想说一声，我在。',
+  natural: '今天路过一家店，忽然想到你。你吃饭了吗？',
+  vivid: '在吗在吗！我今天遇到一件超好玩的事，第一个就想讲给你听，你猜是什么？'
+}
+
+export function buildProactiveOpeningLine(temperature: number, addressUser: string): string {
+  const address = addressUser.trim() === '' ? '你' : addressUser.trim()
+  return applyAddress(PROACTIVE_OPENINGS[temperatureTone(temperature)], address)
+}

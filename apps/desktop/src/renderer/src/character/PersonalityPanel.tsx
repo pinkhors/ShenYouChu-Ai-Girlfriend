@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Icon from '../ui/Icon'
+import type { AvatarConfig } from '../avatar/avatarConfig'
 import {
   ADDRESS_PRESETS,
+  DEFAULT_EXPRESSION,
   INTENSITY_OPTIONS,
   INITIATIVE_OPTIONS,
   JEALOUSY_OPTIONS,
@@ -11,18 +13,35 @@ import {
   PERSONALITY_MODIFIERS,
   SELF_REF_PRESETS,
   personalitySummary,
+  type ExpressionConfig,
   type IntensityId,
   type InitiativeId,
   type JealousyId,
   type PersonalityConfig,
   type PersonalityModifierId
 } from './characterTypes'
-import { buildPersonalityPreview, initiativeLabel, intensityLabel } from './personaPreview'
+import {
+  EXPRESSION_TEMPERATURE_MAX,
+  EXPRESSION_TEMPERATURE_MIN,
+  TEMPERATURE_SCALE_TICKS,
+  calculateExpressionTemperature,
+  formatTemperature,
+  roundTemperature
+} from './expressionTemperature'
+import {
+  buildPersonalityPreview,
+  buildProactiveOpeningLine,
+  initiativeLabel,
+  intensityLabel
+} from './personaPreview'
 import { cx, errorOf } from './characterUiHelpers'
 
 export interface PersonalityPanelProps {
   readonly value: PersonalityConfig
+  readonly avatarConfig: AvatarConfig
+  readonly expression: ExpressionConfig
   readonly onChange: (next: PersonalityConfig) => void
+  readonly onExpressionChange: (next: ExpressionConfig) => void
   readonly errors: Readonly<Record<string, string>>
   readonly readOnly?: boolean
 }
@@ -81,13 +100,50 @@ function Segmented<T extends string>({
 /** 性格面板：主性格、调味标签、表达方式与本地试聊预览。 */
 export default function PersonalityPanel({
   value,
+  avatarConfig,
+  expression,
   onChange,
+  onExpressionChange,
   errors,
   readOnly = false
 }: PersonalityPanelProps) {
   const preview = useMemo(() => buildPersonalityPreview(value), [value])
   const modifierError = errorOf(errors, 'modifiers')
   const addressError = errorOf(errors, 'addressUser')
+  const expressionError = errorOf(errors, 'expression')
+  const [explainOpen, setExplainOpen] = useState(false)
+
+  const autoTemperature = useMemo(
+    () => calculateExpressionTemperature(value, avatarConfig),
+    [value, avatarConfig]
+  )
+  const manualOverride = expression.mode === 'manual' ? expression.temperatureOverride : null
+  const effectiveTemperature = manualOverride ?? autoTemperature.autoTemperature
+  const overrideDelta =
+    manualOverride === null ? 0 : roundTemperature(manualOverride - autoTemperature.autoTemperature)
+  const overrideHint =
+    manualOverride === null
+      ? ''
+      : overrideDelta === 0
+        ? `与推荐值一致（${formatTemperature(autoTemperature.autoTemperature)}）`
+        : `比推荐${overrideDelta > 0 ? '高' : '低'} ${formatTemperature(Math.abs(overrideDelta))}`
+
+  const previewLines = useMemo(() => {
+    const lines = [...preview.lines]
+    lines[3] = buildProactiveOpeningLine(effectiveTemperature, value.addressUser)
+    return lines
+  }, [preview, effectiveTemperature, value.addressUser])
+
+  const setExpressionMode = (mode: ExpressionConfig['mode']): void => {
+    if (mode === 'auto') {
+      onExpressionChange(DEFAULT_EXPRESSION)
+      return
+    }
+    onExpressionChange({
+      mode: 'manual',
+      temperatureOverride: manualOverride ?? autoTemperature.autoTemperature
+    })
+  }
 
   const patch = (next: Partial<PersonalityConfig>): void => {
     onChange({ ...value, ...next })
@@ -289,6 +345,126 @@ export default function PersonalityPanel({
                   patch({ initiative })
                 }}
               />
+              {!readOnly && (
+                <div
+                  className="character-control"
+                  role="group"
+                  aria-label="表达温度"
+                  style={{ gridColumn: '1 / -1' }}
+                >
+                  <span className="character-control__head">
+                    <span className="character-control__label">表达温度</span>
+                    <span className="character-control__value">
+                      {formatTemperature(effectiveTemperature)} ·{' '}
+                      {manualOverride === null ? '自动' : '手动'}
+                    </span>
+                  </span>
+                  <div className="personality__address" role="radiogroup" aria-label="表达温度模式">
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={manualOverride === null}
+                      className={cx(
+                        'personality-chip personality-chip--small',
+                        manualOverride === null && 'personality-chip--active'
+                      )}
+                      onClick={() => {
+                        setExpressionMode('auto')
+                      }}
+                    >
+                      自动（推荐）
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={manualOverride !== null}
+                      className={cx(
+                        'personality-chip personality-chip--small',
+                        manualOverride !== null && 'personality-chip--active'
+                      )}
+                      onClick={() => {
+                        setExpressionMode('manual')
+                      }}
+                    >
+                      手动覆盖
+                    </button>
+                  </div>
+                  {manualOverride !== null && (
+                    <>
+                      <input
+                        type="range"
+                        min={EXPRESSION_TEMPERATURE_MIN}
+                        max={EXPRESSION_TEMPERATURE_MAX}
+                        step={0.01}
+                        value={manualOverride}
+                        aria-label="手动表达温度"
+                        aria-valuetext={formatTemperature(manualOverride)}
+                        onChange={(event) => {
+                          onExpressionChange({
+                            mode: 'manual',
+                            temperatureOverride: roundTemperature(Number(event.target.value))
+                          })
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                      <div
+                        className="personality__address"
+                        style={{ justifyContent: 'space-between' }}
+                      >
+                        {TEMPERATURE_SCALE_TICKS.map((tick) => (
+                          <span className="character-control__help" key={tick.value}>
+                            {tick.label} {formatTemperature(tick.value)}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="character-control__help">
+                        {overrideHint}；推荐值 {formatTemperature(autoTemperature.autoTemperature)}
+                        ，调整性格或形象会自动重算，但不会覆盖你的手动值。
+                      </span>
+                    </>
+                  )}
+                  <span className="character-control__help">
+                    影响用词的跳跃度和主动分享的意愿；不改变她的性格和边界。
+                  </span>
+                  <div className="personality__address">
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      type="button"
+                      aria-expanded={explainOpen}
+                      onClick={() => {
+                        setExplainOpen((previous) => !previous)
+                      }}
+                    >
+                      {explainOpen ? '收起说明' : '为什么是这个值'}
+                    </button>
+                    {manualOverride !== null && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        type="button"
+                        onClick={() => {
+                          setExpressionMode('auto')
+                        }}
+                      >
+                        恢复推荐值
+                      </button>
+                    )}
+                  </div>
+                  {explainOpen && (
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {autoTemperature.explanation.map((line) => (
+                        <li className="character-control__help" key={line}>
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {expressionError !== undefined && (
+                    <span className="character-error" role="alert">
+                      {expressionError}
+                    </span>
+                  )}
+                </div>
+              )}
               <Segmented<JealousyId>
                 label="在意程度"
                 options={JEALOUSY_OPTIONS}
@@ -397,6 +573,12 @@ export default function PersonalityPanel({
             </h3>
             <span className="personality__section-hint">试聊</span>
           </div>
+          {!readOnly && (
+            <p className="personality__preview-note">
+              表达温度 {formatTemperature(effectiveTemperature)}（
+              {manualOverride === null ? '自动' : '手动'}）· {personalitySummary(value)}
+            </p>
+          )}
           <p className="personality__preview-note">
             风格示例，实际对话由模型生成。
           </p>
@@ -405,7 +587,7 @@ export default function PersonalityPanel({
               <li className="personality-bubble" key={scenario}>
                 <span className="personality-bubble__scenario">{scenario}</span>
                 <span className="personality-bubble__line">
-                  {preview.lines[index] ?? ''}
+                  {previewLines[index] ?? ''}
                 </span>
               </li>
             ))}

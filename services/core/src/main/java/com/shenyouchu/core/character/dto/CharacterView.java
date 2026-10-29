@@ -14,6 +14,7 @@ import java.time.Instant;
  * 访问器是 isXxx()，默认 Bean 命名会被序列化成 xxx，破坏前端契约。
  * <p>官方角色不返回 v1 人设原文：personality/family 为 null，tags 由旧 traits 映射；
  * avatarConfig 为空时返回官方默认对象。自定义角色返回 v2 结构。
+ * <p>{@code expression} 只对自定义角色返回（官方角色为 null，继续使用用户级温度）。
  */
 public record CharacterView(
         String id,
@@ -30,5 +31,6 @@ public record CharacterView(
         FamilyView family,
         long version,
         @JsonFormat(shape = JsonFormat.Shape.STRING) Instant createdAt,
-        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedAt) {
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant updatedAt,
+        ExpressionView expression) {
 }

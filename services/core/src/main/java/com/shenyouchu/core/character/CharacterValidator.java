@@ -1,14 +1,18 @@
 package com.shenyouchu.core.character;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.shenyouchu.core.character.dto.ExpressionConfig;
 import com.shenyouchu.core.character.dto.FamilyView;
 import com.shenyouchu.core.character.dto.PersonalityView;
 import com.shenyouchu.core.common.ApiException;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 角色设定校验（文档 §3.7 / §5.5）。
@@ -24,6 +28,11 @@ public class CharacterValidator {
     private static final String CODE_AGE_OUT_OF_RANGE = "CHARACTER_AGE_OUT_OF_RANGE";
     private static final String CODE_OPTION_INVALID = "CHARACTER_OPTION_INVALID";
     private static final String CODE_NOTE_TOO_LONG = "CHARACTER_NOTE_TOO_LONG";
+    private static final String CODE_EXPRESSION_INVALID = "CHARACTER_EXPRESSION_INVALID";
+
+    /** 手动表达温度的允许区间（文档 09 §6.1）。 */
+    private static final double TEMPERATURE_MIN = 0.30;
+    private static final double TEMPERATURE_MAX = 1.20;
 
     /** 名称：去首尾空格、2–12 字符、禁止换行/控制字符。 */
     public String normalizeName(String raw) {
@@ -156,6 +165,36 @@ public class CharacterValidator {
         return json;
     }
 
+    /**
+     * 表达温度配置：缺省/null/空对象回退 auto；mode 只允许 auto/manual；
+     * manual 必须携带 0.30–1.20 的 override（四舍五入到 2 位）；auto 时 override 置 null。
+     *
+     * <p>任何非法输入都抛 400 {@code CHARACTER_EXPRESSION_INVALID}，不静默回退。
+     */
+    public ExpressionConfig normalizeExpression(ExpressionConfig input) {
+        if (input == null) {
+            return ExpressionConfig.auto();
+        }
+        String rawMode = trimToNull(input.mode());
+        if (rawMode == null) {
+            /* expression 为空对象（{}）等价于缺省。 */
+            return ExpressionConfig.auto();
+        }
+        String mode = rawMode.toLowerCase(Locale.ROOT);
+        if (ExpressionConfig.MODE_AUTO.equals(mode)) {
+            return ExpressionConfig.auto();
+        }
+        if (!ExpressionConfig.MODE_MANUAL.equals(mode)) {
+            throw expressionInvalid("表达温度设置不合法，请重试。");
+        }
+        Double override = input.temperatureOverride();
+        if (override == null || !Double.isFinite(override)
+                || override < TEMPERATURE_MIN || override > TEMPERATURE_MAX) {
+            throw expressionInvalid("手动表达温度需在 0.30–1.20 之间。");
+        }
+        return new ExpressionConfig(ExpressionConfig.MODE_MANUAL, round2(override));
+    }
+
     /** 彻底删除时的确认名必须与角色名一致。 */
     public void requireConfirmName(String displayName, String confirmName) {
         String expected = displayName == null ? "" : displayName.trim();
@@ -185,6 +224,14 @@ public class CharacterValidator {
             throw ApiException.badRequest(CODE_OPTION_INVALID, message);
         }
         return id;
+    }
+
+    private static ApiException expressionInvalid(String message) {
+        return ApiException.badRequest(CODE_EXPRESSION_INVALID, message);
+    }
+
+    private static double round2(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private static boolean containsControlCharacter(String text) {

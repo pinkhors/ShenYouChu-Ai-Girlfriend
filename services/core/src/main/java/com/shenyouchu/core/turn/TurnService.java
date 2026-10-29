@@ -2,10 +2,14 @@ package com.shenyouchu.core.turn;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.shenyouchu.core.activity.ActivityService;
+import com.shenyouchu.core.character.CharacterExpressionService;
+import com.shenyouchu.core.character.CharacterProfile;
+import com.shenyouchu.core.character.mapper.CharacterMapper;
 import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.MemoryService;
+import com.shenyouchu.core.memory.dto.MemoryView;
 import com.shenyouchu.core.memorygraph.MemoryChunkService;
 import com.shenyouchu.core.message.Message;
 import com.shenyouchu.core.message.dto.MessagePage;
@@ -34,6 +38,10 @@ public class TurnService {
 
     private static final Logger log = LoggerFactory.getLogger(TurnService.class);
 
+    /** 普通回复上下文（文档 09 §8.6）：最近对话 10 条、记忆 5 条。 */
+    private static final int RECENT_MESSAGE_LIMIT = 10;
+    private static final int CONTEXT_MEMORY_LIMIT = 5;
+
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final PersonaService personaService;
@@ -42,7 +50,10 @@ public class TurnService {
     private final MemoryService memoryService;
     private final MemoryChunkService memoryChunkService;
     private final RelationshipService relationshipService;
+    private final CharacterMapper characterMapper;
+    private final CharacterExpressionService expressionService;
     private final TransactionTemplate transactionTemplate;
+    private final TurnContextAssembler contextAssembler = new TurnContextAssembler();
 
     public TurnService(ConversationMapper conversationMapper,
                        MessageMapper messageMapper,
@@ -52,6 +63,8 @@ public class TurnService {
                        MemoryService memoryService,
                        MemoryChunkService memoryChunkService,
                        RelationshipService relationshipService,
+                       CharacterMapper characterMapper,
+                       CharacterExpressionService expressionService,
                        PlatformTransactionManager transactionManager) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
@@ -61,19 +74,27 @@ public class TurnService {
         this.memoryService = memoryService;
         this.memoryChunkService = memoryChunkService;
         this.relationshipService = relationshipService;
+        this.characterMapper = characterMapper;
+        this.expressionService = expressionService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     /**
      * 一轮对话：外部模型调用放在事务外，避免慢上游长时间占用连接池；
      * 回复生成后，再把消息、记忆、关系与活动事件放进同一个短事务。
+     *
+     * <p>采样温度：自定义角色用角色级生效温度；官方角色/旧数据得到 NaN，
+     * 由生成器回退到用户级配置，行为与历史一致（文档 09 §7）。
      */
     public TurnResponse send(Long userId, Long conversationId, String text) {
         Conversation conversation = requireOwned(userId, conversationId);
         String turnId = UUID.randomUUID().toString();
 
         String prompt = personaService.systemPrompt(conversation.getCharacterId());
-        String reply = replyGenerator.generate(userId, prompt, text);
+        double temperature = replyTemperature(conversation);
+        String context = buildContext(userId, conversation);
+        String reply = replyGenerator.generate(userId, conversation.getCharacterId(), prompt, context,
+                text, temperature);
 
         TurnResponse response = transactionTemplate.execute(status ->
                 persistTurn(conversation, userId, text, turnId, reply));
@@ -89,6 +110,69 @@ public class TurnService {
             log.warn("记忆分块写入失败 turn={}: {}", turnId, ex.getMessage());
         }
         return response;
+    }
+
+    /**
+     * 组装普通回复上下文（文档 09 §8.6 / AC-16、AC-17）。
+     *
+     * <p>最近对话、记忆、关系状态分别读取，任一部分失败只记 warn 并跳过，
+     * 回复链路不因此失败。所有查询都在事务外执行，与“模型调用在事务外”一致。
+     */
+    private String buildContext(Long userId, Conversation conversation) {
+        Long conversationId = conversation.getId();
+        Long characterId = conversation.getCharacterId();
+
+        List<Message> recentMessages = recentMessages(userId, conversationId);
+        List<MemoryView> memories = recentMemories(userId, characterId);
+
+        Integer mood = null;
+        Integer intimacy = null;
+        if (characterId != null) {
+            try {
+                CharacterStateView state = relationshipService.view(userId, characterId);
+                mood = state.mood();
+                intimacy = state.intimacy();
+            } catch (RuntimeException ex) {
+                log.warn("读取关系状态失败 conversation={}: {}", conversationId, ex.getMessage());
+            }
+        }
+        return contextAssembler.assemble(recentMessages, memories, mood, intimacy);
+    }
+
+    /** 当前会话最近 10 条消息，按 id 倒序取再翻正为时间升序；不含本轮尚未落库的输入。 */
+    private List<Message> recentMessages(Long userId, Long conversationId) {
+        try {
+            List<Message> newestFirst = messageMapper.selectList(Wrappers.<Message>lambdaQuery()
+                    .eq(Message::getUserId, userId)
+                    .eq(Message::getConversationId, conversationId)
+                    .orderByDesc(Message::getId)
+                    .last("LIMIT " + RECENT_MESSAGE_LIMIT));
+            if (newestFirst == null || newestFirst.isEmpty()) {
+                return List.of();
+            }
+            List<Message> ascending = new ArrayList<>(newestFirst);
+            Collections.reverse(ascending);
+            return ascending;
+        } catch (RuntimeException ex) {
+            log.warn("读取最近对话失败 conversation={}: {}", conversationId, ex.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 该角色下最新的 5 条记忆；查询失败时返回空列表，上下文其余部分照常注入。 */
+    private List<MemoryView> recentMemories(Long userId, Long characterId) {
+        try {
+            List<MemoryView> memories = memoryService.list(userId, characterId);
+            if (memories == null || memories.isEmpty()) {
+                return List.of();
+            }
+            return memories.size() > CONTEXT_MEMORY_LIMIT
+                    ? new ArrayList<>(memories.subList(0, CONTEXT_MEMORY_LIMIT))
+                    : memories;
+        } catch (RuntimeException ex) {
+            log.warn("读取记忆失败 character={}: {}", characterId, ex.getMessage());
+            return List.of();
+        }
     }
 
     private TurnResponse persistTurn(Conversation conversation, Long userId, String text,
@@ -145,6 +229,16 @@ public class TurnService {
                 ? String.valueOf(page.get(0).getId())
                 : null;
         return new MessagePage(page.stream().map(MessageView::from).toList(), nextCursor);
+    }
+
+    /** 角色级温度：官方角色、缺失角色返回 NaN，生成器据此回退到用户级温度。 */
+    private double replyTemperature(Conversation conversation) {
+        Long characterId = conversation.getCharacterId();
+        if (characterId == null) {
+            return Double.NaN;
+        }
+        CharacterProfile character = characterMapper.selectById(characterId);
+        return expressionService.replyTemperature(character);
     }
 
     /** 归属校验：查不到或不属于当前用户都返回 404。 */
