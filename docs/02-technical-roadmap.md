@@ -161,14 +161,15 @@ idle → listening → transcribing → retrieving → generating → speaking �
 
 详细字段、索引与迁移规范见[数据与接口契约](./contracts/data-and-interface-contracts.md)。
 
-核心实体：`users`、`characters`、`user_character_states`、`conversations`、`messages`、`memories`、`media_sessions`、`recordings`、`visual_events`、`activity_events`、`deletion_jobs`。
+核心实体：`users`、`characters`（官方 + 自定义）、`user_preferences`、`user_character_states`、`conversations`、`messages`、`memories`、`media_sessions`、`recordings`、`visual_events`、`activity_events`、`deletion_jobs`。
 
 统一约定：
 
 - 主键与外键为 `BIGINT` 雪花 ID（MyBatis-Plus `ASSIGN_ID`，workerId/datacenterId 由环境变量注入）；对外 JSON 一律以字符串返回 ID；所有业务表 `created_at / updated_at / deleted_at`；事件类另加 `occurred_at`；
 - 时间统一 UTC 存储（`DATETIME(3)`），前端本地展示；
 - 归属字段 `user_id` 不可为空（系统模板表除外），查询必须带归属条件；
-- 逻辑删除用于常规业务隐藏；用户主动"清除"走 `deletion_jobs` 物理级联删除；
+- 角色：`characters.owner_user_id IS NULL` 为官方模板（人设只读）；非空为自定义角色，`is_public=false`；`user_preferences.active_character_id` 保存当前角色；会话、记忆、关系状态、立绘都按角色隔离；
+- 逻辑删除用于常规业务隐藏；用户主动"清除"走 `deletion_jobs` 物理级联删除；角色"彻底删除"物理清理该角色的会话/消息/记忆/状态；
 - 审计字段由应用写入，保证时区与可测试性一致。
 
 ## 5. 接口设计原则

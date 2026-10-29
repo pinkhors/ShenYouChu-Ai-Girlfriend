@@ -34,6 +34,21 @@ public class ApiException extends RuntimeException {
         return new ApiException("FORBIDDEN", HttpStatus.FORBIDDEN, message);
     }
 
+    /** 带稳定业务码的 403，例如 CHARACTER_READONLY。 */
+    public static ApiException forbidden(String code, String message) {
+        return new ApiException(code, HttpStatus.FORBIDDEN, message);
+    }
+
+    /** 带稳定业务码的 400，例如 CHARACTER_NAME_INVALID。 */
+    public static ApiException badRequest(String code, String message) {
+        return new ApiException(code, HttpStatus.BAD_REQUEST, message);
+    }
+
+    /** 带稳定业务码的 404，例如 CHARACTER_NOT_FOUND。 */
+    public static ApiException notFound(String code, String message) {
+        return new ApiException(code, HttpStatus.NOT_FOUND, message);
+    }
+
     public static ApiException unauthenticated(String message) {
         return new ApiException("UNAUTHENTICATED", HttpStatus.UNAUTHORIZED, message);
     }

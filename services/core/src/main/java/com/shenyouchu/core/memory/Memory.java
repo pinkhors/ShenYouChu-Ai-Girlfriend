@@ -14,6 +14,9 @@ public class Memory extends BaseEntity {
 
     private Long userId;
 
+    /** 记忆归属的角色：写入时从会话带入，列表可按角色筛选，避免跨角色串记忆。 */
+    private Long characterId;
+
     private Long conversationId;
 
     private Long sourceMessageId;
@@ -32,7 +35,13 @@ public class Memory extends BaseEntity {
     }
 
     public Memory(Long userId, Long conversationId, Long sourceMessageId, String memoryType, String content) {
+        this(userId, null, conversationId, sourceMessageId, memoryType, content);
+    }
+
+    public Memory(Long userId, Long characterId, Long conversationId, Long sourceMessageId,
+                  String memoryType, String content) {
         this.userId = userId;
+        this.characterId = characterId;
         this.conversationId = conversationId;
         this.sourceMessageId = sourceMessageId;
         this.memoryType = memoryType;
@@ -45,6 +54,14 @@ public class Memory extends BaseEntity {
 
     public Long getUserId() {
         return userId;
+    }
+
+    public Long getCharacterId() {
+        return characterId;
+    }
+
+    public void setCharacterId(Long characterId) {
+        this.characterId = characterId;
     }
 
     public Long getConversationId() {

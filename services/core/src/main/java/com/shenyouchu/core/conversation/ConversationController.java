@@ -26,11 +26,12 @@ public class ConversationController {
         this.conversationService = conversationService;
     }
 
-    /** 会话分页：按 id 降序（最新在前），cursor 为上一页 nextCursor。 */
+    /** 会话分页：按 id 降序（最新在前），cursor 为上一页 nextCursor；characterId 可选筛选。 */
     @GetMapping
     public ConversationPage list(@RequestParam(defaultValue = "20") int limit,
-                                 @RequestParam(required = false) Long cursor) {
-        return conversationService.list(CurrentUser.require().userId(), limit, cursor);
+                                 @RequestParam(required = false) Long cursor,
+                                 @RequestParam(required = false) String characterId) {
+        return conversationService.list(CurrentUser.require().userId(), limit, cursor, characterId);
     }
 
     @PostMapping

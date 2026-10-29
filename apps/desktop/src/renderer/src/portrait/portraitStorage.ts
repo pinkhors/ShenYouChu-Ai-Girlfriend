@@ -1,10 +1,11 @@
 import { PORTRAIT_SLOTS, type PortraitExpression, type PortraitSet } from './expression'
 
 /**
- * 立绘的本地存储：IndexedDB（key = userId），每个用户一套表情图。
+ * 立绘的本地存储：IndexedDB（key = userId:characterId），每个角色一套表情图。
  *
  * - 不新增后端接口，立绘只在本机生效；
  * - 存 data URL（导入时已压到长边 1400px 的 WebP），避免 object URL 生命周期管理；
+ * - 旧版本按 userId 存一套，首次读取官方角色时自动迁移到 userId:characterId；
  * - 存储不可用时读取降级为“没有立绘”，写入失败由调用方提示。
  */
 
@@ -13,6 +14,7 @@ const DB_VERSION = 1
 const STORE_NAME = 'portraits'
 
 interface StoredPortrait {
+  /** 兼容旧 object store 的 keyPath：userId；新数据里存的是 userId:characterId。 */
   readonly userId: string
   readonly images: Record<string, string>
 }
@@ -55,15 +57,25 @@ function openDatabase(): Promise<IDBDatabase> {
   return databasePromise
 }
 
-function isStoredPortrait(value: unknown): value is StoredPortrait {
+function recordKey(userId: string, characterId: string): string {
+  return `${userId}:${characterId}`
+}
+
+function parseImages(value: unknown): Record<string, string> | null {
   if (typeof value !== 'object' || value === null) {
-    return false
+    return null
   }
-  const record = value as { userId?: unknown; images?: unknown }
-  if (typeof record.userId !== 'string' || typeof record.images !== 'object' || record.images === null) {
-    return false
+  const record = value as { images?: unknown }
+  if (typeof record.images !== 'object' || record.images === null) {
+    return null
   }
-  return Object.values(record.images as Record<string, unknown>).every((image) => typeof image === 'string')
+  const images: Record<string, string> = {}
+  for (const [key, image] of Object.entries(record.images as Record<string, unknown>)) {
+    if (typeof image === 'string') {
+      images[key] = image
+    }
+  }
+  return images
 }
 
 function toPortraitSet(images: Record<string, string>): PortraitSet {
@@ -77,14 +89,14 @@ function toPortraitSet(images: Record<string, string>): PortraitSet {
   return result
 }
 
-async function readRecord(userId: string): Promise<StoredPortrait | null> {
+async function readImages(storageKey: string): Promise<Record<string, string> | null> {
   const database = await openDatabase()
   const transaction = database.transaction(STORE_NAME, 'readonly')
-  const value: unknown = await requestToPromise(transaction.objectStore(STORE_NAME).get(userId))
-  return isStoredPortrait(value) ? value : null
+  const value: unknown = await requestToPromise(transaction.objectStore(STORE_NAME).get(storageKey))
+  return parseImages(value)
 }
 
-function writeRecord(record: StoredPortrait): Promise<void> {
+function writeImages(storageKey: string, images: Record<string, string>): Promise<void> {
   return openDatabase().then(
     (database) =>
       new Promise<void>((resolve, reject) => {
@@ -98,12 +110,13 @@ function writeRecord(record: StoredPortrait): Promise<void> {
         transaction.onabort = () => {
           reject(transaction.error ?? new Error('写入立绘被中止'))
         }
+        const record: StoredPortrait = { userId: storageKey, images }
         transaction.objectStore(STORE_NAME).put(record)
       })
   )
 }
 
-function deleteRecord(userId: string): Promise<void> {
+function deleteRecord(storageKey: string): Promise<void> {
   return openDatabase().then(
     (database) =>
       new Promise<void>((resolve, reject) => {
@@ -114,20 +127,42 @@ function deleteRecord(userId: string): Promise<void> {
         transaction.onerror = () => {
           reject(transaction.error ?? new Error('删除立绘失败'))
         }
-        transaction.objectStore(STORE_NAME).delete(userId)
+        transaction.objectStore(STORE_NAME).delete(storageKey)
       })
   )
 }
 
-/** 读取该用户的立绘；缺失或存储不可用时返回 null（界面回退矢量形象）。 */
-export async function loadPortraits(userId: string): Promise<PortraitSet | null> {
+/**
+ * 读取该角色的立绘。
+ * officialCharacterId 传入时，若这是官方角色且新 key 没有数据，会尝试把旧版 userId 数据迁移过来。
+ */
+export async function loadPortraits(
+  userId: string,
+  characterId: string,
+  officialCharacterId?: string
+): Promise<PortraitSet | null> {
   try {
-    const record = await readRecord(userId)
-    if (record === null) {
+    const key = recordKey(userId, characterId)
+    let images = await readImages(key)
+    if (officialCharacterId === characterId) {
+      /* 旧版按 userId 存的一套可能包含立绘与 hero；新记录可能只写了其中一部分。 */
+      const legacy = await readImages(userId)
+      if (legacy !== null) {
+        const merged: Record<string, string> = { ...legacy, ...(images ?? {}) }
+        images = merged
+        try {
+          await writeImages(key, merged)
+          await deleteRecord(userId)
+        } catch {
+          /* 迁移写入失败时保留旧记录，下次再试；本次仍返回合并结果 */
+        }
+      }
+    }
+    if (images === null) {
       return null
     }
-    const images = toPortraitSet(record.images)
-    return Object.keys(images).length === 0 ? null : images
+    const portraits = toPortraitSet(images)
+    return Object.keys(portraits).length === 0 ? null : portraits
   } catch {
     return null
   }
@@ -135,64 +170,110 @@ export async function loadPortraits(userId: string): Promise<PortraitSet | null>
 
 export async function savePortrait(
   userId: string,
+  characterId: string,
   slot: PortraitExpression,
   dataUrl: string
 ): Promise<void> {
-  const record = await readRecord(userId)
-  const images: Record<string, string> = { ...(record?.images ?? {}) }
+  const key = recordKey(userId, characterId)
+  const images: Record<string, string> = { ...(await readImages(key) ?? {}) }
   images[slot] = dataUrl
-  await writeRecord({ userId, images })
+  await writeImages(key, images)
 }
 
-export async function removePortrait(userId: string, slot: PortraitExpression): Promise<void> {
-  const record = await readRecord(userId)
-  if (record === null) {
+export async function removePortrait(
+  userId: string,
+  characterId: string,
+  slot: PortraitExpression
+): Promise<void> {
+  const key = recordKey(userId, characterId)
+  const images = await readImages(key)
+  if (images === null) {
     return
   }
-  const images: Record<string, string> = { ...record.images }
-  delete images[slot]
-  if (Object.keys(images).length === 0) {
-    await deleteRecord(userId)
+  const next = { ...images }
+  delete next[slot]
+  if (Object.keys(next).length === 0) {
+    await deleteRecord(key)
     return
   }
-  await writeRecord({ userId, images })
+  await writeImages(key, next)
 }
 
-export async function clearPortraits(userId: string): Promise<void> {
-  await deleteRecord(userId)
+export async function clearPortraits(
+  userId: string,
+  characterId: string,
+  officialCharacterId?: string
+): Promise<void> {
+  await deleteRecord(recordKey(userId, characterId))
+  if (officialCharacterId === characterId) {
+    await deleteRecord(userId).catch(() => undefined)
+  }
 }
 
 /* ---------------- 聊天页主视觉（抠图） ---------------- */
 
 const HERO_KEY = 'hero'
 
-export async function loadHeroImage(userId: string): Promise<string | null> {
+export async function loadHeroImage(
+  userId: string,
+  characterId: string,
+  officialCharacterId?: string
+): Promise<string | null> {
   try {
-    const record = await readRecord(userId)
-    const hero = record?.images[HERO_KEY]
-    return typeof hero === 'string' && hero !== '' ? hero : null
+    const images = await readImages(recordKey(userId, characterId))
+    const direct = images?.[HERO_KEY]
+    if (typeof direct === 'string' && direct !== '') {
+      return direct
+    }
+    if (officialCharacterId === characterId) {
+      const legacy = await readImages(userId)
+      const hero = legacy?.[HERO_KEY]
+      return typeof hero === 'string' && hero !== '' ? hero : null
+    }
+    return null
   } catch {
     return null
   }
 }
 
-export async function saveHeroImage(userId: string, dataUrl: string): Promise<void> {
-  const record = await readRecord(userId)
-  const images: Record<string, string> = { ...(record?.images ?? {}) }
+export async function saveHeroImage(
+  userId: string,
+  characterId: string,
+  dataUrl: string
+): Promise<void> {
+  const key = recordKey(userId, characterId)
+  const images: Record<string, string> = { ...(await readImages(key) ?? {}) }
   images[HERO_KEY] = dataUrl
-  await writeRecord({ userId, images })
+  await writeImages(key, images)
 }
 
-export async function clearHeroImage(userId: string): Promise<void> {
-  const record = await readRecord(userId)
-  if (record === null) {
-    return
+export async function clearHeroImage(
+  userId: string,
+  characterId: string,
+  officialCharacterId?: string
+): Promise<void> {
+  const key = recordKey(userId, characterId)
+  const images = await readImages(key)
+  if (images !== null) {
+    const next = { ...images }
+    delete next[HERO_KEY]
+    if (Object.keys(next).length === 0) {
+      await deleteRecord(key)
+    } else {
+      await writeImages(key, next)
+    }
   }
-  const images: Record<string, string> = { ...record.images }
-  delete images[HERO_KEY]
-  if (Object.keys(images).length === 0) {
-    await deleteRecord(userId)
-    return
+  /* 官方角色的旧版 userId 记录里可能还留着 hero，清除时一并移除。 */
+  if (officialCharacterId === characterId) {
+    const legacy = await readImages(userId)
+    if (legacy !== null && HERO_KEY in legacy) {
+      const next = { ...legacy }
+      delete next[HERO_KEY]
+      if (Object.keys(next).length === 0) {
+        await deleteRecord(userId)
+      } else {
+        await writeImages(userId, next)
+      }
+    }
   }
-  await writeRecord({ userId, images })
 }

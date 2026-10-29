@@ -23,6 +23,7 @@ interface GirlfriendAvatarProps {
   readonly variant?: 'portrait' | 'avatar'
   readonly size?: number
   readonly className?: string
+  readonly name?: string
 }
 
 interface EyeProps {
@@ -104,6 +105,10 @@ function backHair(style: HairStyleId): string {
       return 'M 160 86 C 114 86 88 122 88 178 C 88 214 92 240 100 262 C 112 274 132 280 160 280 C 188 280 208 274 220 262 C 228 240 232 214 232 178 C 232 122 206 86 160 86 Z'
     case 'updo':
       return 'M 160 86 C 116 86 92 120 92 174 C 92 204 96 228 104 248 C 118 258 138 262 160 262 C 182 262 202 258 216 248 C 224 228 228 204 228 174 C 228 120 204 86 160 86 Z'
+    case 'ponytail':
+      return 'M 160 86 C 114 86 88 122 88 178 C 88 210 92 236 100 258 C 112 270 132 276 160 276 C 188 276 208 270 220 258 C 228 236 232 210 232 178 C 232 122 206 86 160 86 Z'
+    case 'short':
+      return 'M 160 88 C 118 88 94 120 94 170 C 94 198 98 220 106 238 C 120 248 138 252 160 252 C 182 252 200 248 214 238 C 222 220 226 198 226 170 C 226 120 202 88 160 88 Z'
   }
 }
 
@@ -119,6 +124,10 @@ function frontHair(style: HairStyleId): string {
       return 'M 92 196 C 90 128 118 94 160 94 C 202 94 230 128 228 196 C 226 172 218 156 206 148 C 190 138 170 142 154 152 C 138 162 122 168 108 176 C 100 182 96 188 92 196 Z'
     case 'updo':
       return 'M 92 196 C 90 128 118 94 160 94 C 202 94 230 128 228 196 C 226 172 216 156 202 148 C 184 138 166 144 152 156 C 140 166 124 172 110 180 C 102 186 96 190 92 196 Z'
+    case 'ponytail':
+      return 'M 92 196 C 90 128 118 94 160 94 C 202 94 230 128 228 196 C 226 174 218 158 206 150 C 190 140 170 144 154 154 C 138 164 122 170 108 178 C 100 184 96 190 92 196 Z'
+    case 'short':
+      return 'M 94 190 C 92 128 120 96 160 96 C 200 96 228 128 226 190 C 220 172 212 160 200 154 C 184 146 136 146 120 154 C 108 160 100 172 94 190 Z'
   }
 }
 
@@ -132,11 +141,79 @@ const TWIN_TAIL =
 
 const GLASSES_SHADOW = 'rgba(40, 30, 26, 0.16)'
 
+/** 服饰风格只改轮廓细节，不引入外部图片；颜色仍由 outfitColor 控制。 */
+function OutfitDetails({
+  style,
+  shade
+}: {
+  readonly style: AvatarConfig['outfitStyle']
+  readonly shade: string
+}) {
+  switch (style) {
+    case 'knit':
+      return (
+        <g stroke={shade} strokeWidth="2" fill="none" opacity="0.8">
+          <path d="M 160 326 L 160 400" />
+          <path d="M 154 338 h 12 M 154 352 h 12" strokeLinecap="round" />
+          <path d="M 128 390 C 140 384 180 384 192 390" opacity="0.5" />
+        </g>
+      )
+    case 'campus':
+      return (
+        <g>
+          <path d="M 136 314 L 160 344 L 184 314" fill="none" stroke={shade} strokeWidth="2.4" opacity="0.8" />
+          <path d="M 160 344 L 150 362 L 160 356 L 170 362 Z" fill="#c2636c" opacity="0.85" />
+          <path d="M 116 360 h 88" stroke={shade} strokeWidth="1.6" opacity="0.35" />
+        </g>
+      )
+    case 'commute':
+      return (
+        <g stroke={shade} strokeWidth="2.2" fill="none" opacity="0.85">
+          <path d="M 136 314 L 160 348 L 184 314" />
+          <path d="M 148 330 L 160 348 L 172 330" />
+          <path d="M 160 348 L 160 400" opacity="0.45" />
+        </g>
+      )
+    case 'home':
+      return (
+        <g stroke={shade} strokeWidth="2" fill="none" opacity="0.75">
+          <path d="M 132 322 C 142 338 178 338 188 322" />
+          <path d="M 150 344 L 146 360 M 170 344 L 174 360" strokeLinecap="round" />
+          <path d="M 124 372 h 30" opacity="0.45" />
+        </g>
+      )
+    case 'vintage':
+      return (
+        <g>
+          <path d="M 136 314 L 136 338 L 184 338 L 184 314" fill="none" stroke={shade} strokeWidth="2.2" opacity="0.8" />
+          <circle cx="160" cy="326" r="4" fill="#d8b06a" />
+          <path d="M 148 354 h 24" stroke={shade} strokeWidth="1.5" opacity="0.4" />
+        </g>
+      )
+    case 'sporty':
+      return (
+        <g stroke={shade} strokeWidth="2" fill="none" opacity="0.8">
+          <path d="M 160 320 L 160 400" />
+          <path d="M 156 326 h 8 M 156 336 h 8" strokeLinecap="round" />
+          <path d="M 118 356 L 138 350 M 202 356 L 182 350" opacity="0.55" />
+        </g>
+      )
+    default:
+      return (
+        <g stroke={shade} strokeWidth="1.8" fill="none" opacity="0.55">
+          <path d="M 138 320 C 146 330 174 330 182 320" />
+          <path d="M 118 362 C 132 356 144 366 160 366 C 176 366 188 356 202 362" opacity="0.4" />
+        </g>
+      )
+  }
+}
+
 function GirlfriendAvatar({
   config,
   variant = 'portrait',
   size,
-  className
+  className,
+  name = '沈幼楚'
 }: GirlfriendAvatarProps) {
   const rawId = useId()
   const uid = rawId.replace(/[^a-zA-Z0-9_-]/g, '')
@@ -186,7 +263,7 @@ function GirlfriendAvatar({
       className={['avatar', `avatar--${variant}`, className].filter(Boolean).join(' ')}
       viewBox={variant === 'avatar' ? '65 82 190 190' : '0 0 320 400'}
       role="img"
-      aria-label={`沈幼楚的半写实形象：${describeAvatar(config)}`}
+      aria-label={`${name}的半写实形象：${describeAvatar(config)}`}
       preserveAspectRatio="xMidYMid slice"
       width={size === undefined ? undefined : size}
       height={size === undefined ? undefined : size}
@@ -243,6 +320,7 @@ function GirlfriendAvatar({
         opacity="0.8"
       />
       <path d="M 126 320 C 138 352 182 352 194 320" fill="none" stroke="#ffffff" strokeOpacity="0.28" strokeWidth="3" />
+      <OutfitDetails style={config.outfitStyle} shade={outfit.shade} />
 
       {/* 颈与阴影 */}
       <path d="M 138 278 L 182 278 L 178 318 C 166 326 154 326 142 318 Z" fill={skin.base} />
@@ -264,6 +342,12 @@ function GirlfriendAvatar({
           <circle cx="160" cy="66" r="19" fill={hair.shadow} opacity="0.45" />
           <ellipse cx="152" cy="58" rx="10" ry="6" fill={hair.highlight} opacity="0.5" transform="rotate(-24 152 58)" />
         </>
+      )}
+      {config.hairStyle === 'ponytail' && (
+        <path
+          d="M 218 132 C 252 154 262 202 252 254 C 248 278 238 296 226 306 C 238 266 238 216 226 174 Z"
+          fill={`url(#${uid}-hair)`}
+        />
       )}
 
       {/* 耳朵 */}

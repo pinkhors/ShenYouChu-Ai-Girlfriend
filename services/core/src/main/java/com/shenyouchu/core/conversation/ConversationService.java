@@ -2,8 +2,7 @@ package com.shenyouchu.core.conversation;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.shenyouchu.core.activity.ActivityService;
-import com.shenyouchu.core.character.CharacterProfile;
-import com.shenyouchu.core.character.mapper.CharacterMapper;
+import com.shenyouchu.core.character.CharacterService;
 import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.dto.ConversationPage;
 import com.shenyouchu.core.conversation.dto.ConversationView;
@@ -22,32 +21,37 @@ import java.util.Map;
 @Service
 public class ConversationService {
 
-    private static final String DEFAULT_CHARACTER_CODE = "shenyouchu";
-
     private final ConversationMapper conversationMapper;
-    private final CharacterMapper characterMapper;
+    private final CharacterService characterService;
     private final ActivityService activityService;
     private final MessageMapper messageMapper;
     private final MemoryMapper memoryMapper;
 
     public ConversationService(ConversationMapper conversationMapper,
-                               CharacterMapper characterMapper,
+                               CharacterService characterService,
                                ActivityService activityService,
                                MessageMapper messageMapper,
                                MemoryMapper memoryMapper) {
         this.conversationMapper = conversationMapper;
-        this.characterMapper = characterMapper;
+        this.characterService = characterService;
         this.activityService = activityService;
         this.messageMapper = messageMapper;
         this.memoryMapper = memoryMapper;
     }
 
-    /** 会话分页：按 id 降序（最新在前），取 limit+1 判断是否还有下一页。 */
+    /**
+     * 会话分页：按 id 降序（最新在前），取 limit+1 判断是否还有下一页。
+     * characterId 可选，用于只看某个角色的会话；结果始终限定在当前用户内。
+     */
     @Transactional(readOnly = true)
-    public ConversationPage list(Long userId, int limit, Long cursor) {
+    public ConversationPage list(Long userId, int limit, Long cursor, String characterId) {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
+        Long characterFilter = characterId == null || characterId.isBlank()
+                ? null
+                : characterService.parseCharacterId(characterId);
         List<Conversation> rows = conversationMapper.selectList(Wrappers.<Conversation>lambdaQuery()
                 .eq(Conversation::getUserId, userId)
+                .eq(characterFilter != null, Conversation::getCharacterId, characterFilter)
                 .lt(cursor != null, Conversation::getId, cursor)
                 .orderByDesc(Conversation::getId)
                 .last("LIMIT " + (safeLimit + 1)));
@@ -62,7 +66,8 @@ public class ConversationService {
 
     @Transactional
     public ConversationView create(Long userId, CreateConversationRequest request) {
-        Long characterId = resolveCharacterId(request.characterId());
+        /* 不传 characterId 用当前角色；显式传入必须是官方或本人所有，归档角色 409。 */
+        Long characterId = characterService.resolveConversationCharacter(userId, request.characterId());
         Conversation conversation = new Conversation(
                 userId,
                 characterId,
@@ -102,28 +107,5 @@ public class ConversationService {
             throw ApiException.notFound("会话不存在");
         }
         return conversation;
-    }
-
-    /** 角色 ID 对外是字符串；非数字输入视为非法参数，不落到数据库查询。 */
-    private Long resolveCharacterId(String requested) {
-        if (requested != null && !requested.isBlank()) {
-            long characterId;
-            try {
-                characterId = Long.parseLong(requested.trim());
-            } catch (NumberFormatException ex) {
-                throw ApiException.validation("角色 ID 格式不正确");
-            }
-            CharacterProfile character = characterMapper.selectById(characterId);
-            if (character == null) {
-                throw ApiException.validation("角色不存在");
-            }
-            return character.getId();
-        }
-        CharacterProfile fallback = characterMapper.selectOne(Wrappers.<CharacterProfile>lambdaQuery()
-                .eq(CharacterProfile::getCode, DEFAULT_CHARACTER_CODE));
-        if (fallback == null) {
-            throw ApiException.notFound("默认角色未初始化，请先执行数据库迁移");
-        }
-        return fallback.getId();
     }
 }

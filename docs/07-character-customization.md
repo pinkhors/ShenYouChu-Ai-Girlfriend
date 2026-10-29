@@ -1,8 +1,8 @@
 # 女友角色设定（Character Studio）功能设计
 
-- 版本：v0.1
-- 状态：设计提案（待评审，未实现）
-- 关联：[产品需求文档](./01-product-requirements.md) FR-2.1 / FR-2.3 / FR-2.4、[数据与接口契约](./contracts/data-and-interface-contracts.md) §2.2–2.5、[开发规范](./03-development-standards.md)
+- 版本：v1.0
+- 状态：P0 已实现；P1 核心项已实现（草稿自动备份、角色卡统计、复制立绘等未做）；P2 未实现；V4 已在本机 MySQL 8 执行并通过 API 冒烟；Electron 视觉回归与 IndexedDB 迁移待本机验证
+- 关联：[产品需求文档](./01-product-requirements.md) FR-2.1 / FR-2.3 / FR-2.4 / FR-2.5 / FR-2.6、[数据与接口契约](./contracts/data-and-interface-contracts.md) §2.2–2.5、[开发规范](./03-development-standards.md)
 - 范围：桌面端角色的创建、编辑、保存、切换，以及和现有聊天、形象、记忆、通话、设置的衔接
 
 ## 0. 结论摘要
@@ -371,7 +371,7 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 | 补充设定 | ≤ 60 字符、无换行 | “补充设定最多 60 个字符，且不能换行。” |
 | 主性格 | 必须是 8 个枚举之一 | “请选择一个主性格。” |
 | 调味标签 | ≤ 2 个，互斥项不可同选 | “‘独立’和‘黏人’不能同时选择。” |
-| 角色数量 | 自定义角色 ≤ 12 个（含归档） | “最多保存 12 个自定义角色，请先归档或删除一个。” |
+| 角色数量 | 自定义角色 ≤ 12 个（含归档） | “最多保存 12 个自定义角色（归档也计入），请先彻底删除一个。” |
 | 并发保存 | 版本号不一致返回 409 | “这个角色在别处被修改过，请重新加载后再保存。” |
 
 ## 4. 界面与交互设计
@@ -412,7 +412,7 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 - 加载中：3 张骨架卡。
 - 加载失败：顶部横幅“角色加载失败”+ 重试；官方角色仍可用默认数据展示。
 - 我的角色为空：模板卡 + “从空白开始”。
-- 达到上限：新建按钮禁用，提示“最多 12 个，先归档一个吧”。
+- 达到上限：新建按钮禁用，提示“最多 12 个（归档也计入），先彻底删除一个”。
 
 ### 4.2 切换器
 
@@ -555,7 +555,7 @@ outfitStyle: 'casual' | 'knit' | 'campus' | 'commute' | 'home' | 'vintage' | 'sp
 
 | 现有位置 | 现状 | 改造 |
 |---|---|---|
-| `App.tsx` | 单一 `avatar` / `portraits` / `heroImage` state；`getAvatar(user.id)` | 引入 `CharacterProvider`；当前角色 + 角色列表；官方形象读本机覆盖，立绘按 `userId:characterId` 读取 |
+| `App.tsx` | 单一 `avatar` / `portraits` / `heroImage` state；`getAvatar(user.id)` | 引入 `useCharacters` / `CharacterManager`；当前角色 + 角色列表；官方形象读本机覆盖，立绘按 `userId:characterId` 读取 |
 | `EmptyChat` | 写死“沈幼楚在这里” | 用当前角色的名字、立绘、介绍 |
 | `ChatView.tsx` | 传 `avatar/portraits`；头部、hero、aria、输入框 placeholder、正在输入都写死沈幼楚 | 传 `character`；所有文案用 `character.displayName`；关系状态按 `conversation.characterId` 加载 |
 | `ConversationSidebar.tsx` | 所有会话用同一头像；副标题写死“沈幼楚” | 按 `conversation.characterId` 解析头像和名字；增加角色筛选/分组 |
@@ -795,7 +795,7 @@ WHERE m.character_id IS NULL;
    - 首次进入角色页给一次性说明：“你之前为沈幼楚调整过形象，已保留在本机。想连人设一起改，可以复制为我的角色。”
    - 动作为 [知道了] [复制为我的角色]；不强制选择，默认保留本机覆盖。
    - 复制时把当前形象（含本机覆盖）写入新角色；旧会话是否迁移由用户勾选，默认不迁移。
-   - 清除本机覆盖的入口在形象页，清除后回到官方默认形象。
+   - 清除本机覆盖的入口在角色页 → 形象，清除后回到官方默认形象。
 6. **立绘**：旧 IndexedDB key 是 `userId`。首次读取时若存在旧记录，复制到 `${userId}:${officialCharacterId}`，成功后删除旧 key；失败则保留旧 key，界面仍能显示。
 7. **设置文案**：删除“形象只保存在本机”的笼统表述；改为“自定义角色定义随账号同步；官方角色的本机形象覆盖与立绘只在本机”。
 8. **删除账号**：级联清理 `characters`（自定义）、`user_preferences`、`conversations`、`memories`、`user_character_states`、官方本机形象覆盖与本机立绘；官方角色不动。同步更新删除账号确认文案，明确包含“自定义角色”。
@@ -922,7 +922,7 @@ POST /conversations/{id}/turns/stream
 ### P0（可演示的最小闭环）
 
 1. 后端：V4 迁移、`characters` 扩展、`user_preferences`、`memories.character_id` 回填、角色 CRUD、切换、归属校验、提示词编译、边界测试。
-2. 前端：`CharacterProvider`、角色中心、四步创建（含模板选择）、标签编辑器（基础/形象/性格/家庭）、切换器、聊天/会话/通话/空态接入、复制角色、归档/删除的最小 UI。
+2. 前端：`useCharacters` / `CharacterManager`、角色中心、四步创建（含模板选择）、标签编辑器（基础/形象/性格/家庭）、切换器、聊天/会话/通话/空态接入、复制角色、归档/删除的最小 UI。
 3. 立绘本机 key 改造 + 旧数据迁移；官方角色本机形象覆盖（旧捏脸兼容）与一次性说明。
 4. 记忆/活动至少显示角色标签，避免多角色混排；回归单角色链路、删除账号、活动事件。
 
@@ -981,7 +981,7 @@ POST /conversations/{id}/turns/stream
 | 删除/归档 | 归档角色 / 彻底删除 |
 | 归档说明 | 归档后她从切换器消失，但你们的会话还在，随时可以恢复。 |
 | 彻底删除说明 | 会一并删除与她的 N 个会话、M 条消息和 K 条记忆，无法恢复。 |
-| 上限提示 | 最多保存 12 个自定义角色，请先归档或删除一个。 |
+| 上限提示 | 最多保存 12 个自定义角色（归档也计入），请先彻底删除一个。 |
 | 年龄提示 | 仅支持 18 岁以上的成年角色。 |
 | 家庭提示 | 这些设定只影响她的表达与生活细节，不代表对任何群体的判断。 |
 | 试聊提示 | 以下为风格示例，实际对话由模型生成。 |
@@ -991,7 +991,7 @@ POST /conversations/{id}/turns/stream
 ## 附录 B：与现有实现的最小改动顺序
 
 1. **先加数据，不改展示**：V4 迁移 + 官方角色补 `avatar_config` + 当前角色偏好；前端仍用默认角色，回归通过。
-2. **再抽数据源**：`CharacterProvider` + `CharacterView`，把 `App.tsx` 的单一 `avatar` 换成“当前角色”；所有写死沈幼楚的地方改为读角色；此时仍只有官方角色。
+2. **再抽数据源**：`useCharacters` / `CharacterManager` + `CharacterView`，把 `App.tsx` 的单一 `avatar` 换成“当前角色”；所有写死沈幼楚的地方改为读角色；此时仍只有官方角色。
 3. **加角色中心与切换器**：官方角色卡片（人设只读）+ 切换器；还没有创建能力，先验证切换不影响现有会话。
 4. **加创建/编辑**：基础 → 形象（复用现有捏脸/立绘）→ 性格 → 家庭；先本地草稿，保存走新 API。
 5. **接人设**：`PersonaService` 支持 v2；用测试账号对比同一句话在不同角色下的提示词与回复。
@@ -999,3 +999,15 @@ POST /conversations/{id}/turns/stream
 7. **补体验**：模板、复制、冲突处理、记忆筛选、无障碍与文案。
 
 这个顺序保证每一步都能独立回归，不会出现“角色功能做完，聊天坏了”的大爆炸。
+
+## 实现落地（P0 + P1 核心项）
+
+已完成 P0 与 P1 核心项的主要代码：
+
+- 后端：`V4__character_customization.sql`；`CharacterService`、`CharacterController`、`CharacterValidator`、`CharacterCatalog`、`CharacterPersona`、`CharacterPromptCompiler`；`user_preferences`；`CharacterStateController`、`ConversationService`、`MemoryService`、`AccountDeletionService` 按角色接入。
+- 前端：`character/` 下的 `CharacterHub`、`CharacterEditor`、`CharacterSwitcher`、`IdentityPanel`、`AppearancePanel`、`PersonalityPanel`、`FamilyPanel`、`CharacterPreviewCard`、`useCharacters`、`usePortraitAssets`、`characterApi`、`characterTypes`；`ChatView`、`ConversationSidebar`、`MemoryPanel`、`SettingsPanel`、`CallView`、`App` 已角色化。
+- 存储：官方角色矢量形象保留本机覆盖；自定义角色形象随账号；立绘/聊天主视觉 key 改为 `userId:characterId`，旧 `userId` 立绘在官方角色首次读取时迁移。
+- 测试：后端 `CharacterPromptCompilerTest` 6、`CharacterValidatorTest` 9、`CharacterViewJsonTest` 3、`MemoryHeuristicTest` 3（21/21）；本机 MySQL 8 + 48082 实例 API 冒烟 32 项通过（V4 history=4，CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离/记忆按角色）；前端 `npm test` 84 项通过；`npx tsc --noEmit` 通过；`mvn -DskipTests package` 通过。
+- 未实现（P1 增强）：草稿本地自动备份、角色卡“上次聊天/会话数”、活动页按角色筛选、复制角色时勾选复制本机立绘。
+- 未实现（P2）：每个角色独立音色/语速、关系起点、角色卡导出/导入、Live2D、更多外观资产。
+- 未在本沙箱验证：Electron 窗口视觉回归、IndexedDB 迁移的真实浏览器冒烟；Mockito 测试受沙箱 `MockMaker` 限制，需本机复跑。

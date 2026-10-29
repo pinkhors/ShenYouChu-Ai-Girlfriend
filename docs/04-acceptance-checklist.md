@@ -1,6 +1,6 @@
 # 验收清单（对照 PRD）
 
-- 版本：v0.2（M0–M2 阶段）
+- 版本：v0.3（M0–M2 + 角色自定义 P0 + P1 核心项）
 - 对照：[PRD](./01-product-requirements.md) 的功能需求与验收标准
 - 状态含义：**已验收**＝有真实环境证据；**已实现**＝代码完成、类型/编译通过，但缺少端到端证据；**待实现**＝尚未开始
 
@@ -26,6 +26,23 @@
 | FR-6.5 活动追踪开关 | 开关与保留期 | 待实现 | 设置接口未做 |
 | FR-7.1–7.3 设备控制与数据权利 | 设备开关、数据查看、级联删除 | 部分实现 | 会话级联删除、账号删除（MySQL + Redis + 对象存储前缀清理）已真实验收；Milvus 向量清理为占位端口；用户名因唯一索引仍被保留 |
 | FR-8.x 搜索（P1/P2） | SearchPort + 用户搜索 + 运营检索 | 待实现 | 契约已定义 |
+| FR-2.5/2.6 角色自定义与切换 | 创建/编辑/保存/切换/归档/彻底删除；官方只读；会话/记忆/关系/立绘按角色隔离 | 已验收（后端 API） | 本机 MySQL 8 + 48082 实例冒烟：V4 history=4；32 项角色 CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离全部通过；前端 `npx tsc --noEmit`、`npm test` |
+
+## 一·补、角色自定义专项验收
+
+| 项 | 期望 | 状态 | 证据 / 命令 |
+|---|---|---|---|
+| 创建/编辑 | 三类设定可保存并回显；名字/年龄/长度/互斥校验生效 | 已验收（API） | 本机 MySQL 8 + 48082 冒烟；`CharacterValidatorTest`；`npm test` 的 characterTypes 用例 |
+| 提示词 | 官方 v1 输出不变；自定义 v2 含性格/调味/表达/来处/补充；边界永远最后 | 已实现 | `CharacterPromptCompilerTest`（6 例） |
+| 切换 | 当前角色唯一；任意页面可切换；没有会话时进空态 | 已验收（API） | 本机冒烟 `PUT /preferences/active-character` + `character-state?characterId` |
+| 会话绑定 | 会话创建时绑定角色，之后不可换人；归档角色不能开新会话 | 已验收（API） | 本机冒烟：创建会话绑定角色、归档后新建 409 |
+| 记忆/关系隔离 | 记忆按角色筛选；心情/亲密度按 user+character | 已验收（API） | 本机冒烟：写入记忆带 characterId、按角色筛选、关系状态按角色返回 |
+| 官方角色 | 写操作 403；可查看/复制；本机形象覆盖不进服务端 | 已验收（API 部分） | 本机冒烟官方 PATCH 403；复制与本机形象覆盖前端待 UI 冒烟 |
+| 迁移 | 旧捏脸保留为官方本机覆盖；旧立绘迁到 userId:characterId | 已实现，待本机 IndexedDB 验证 | `avatarStorage`/`portraitStorage`；V4 已在本机 MySQL 8 执行 |
+| 删除 | 归档保留会话可恢复；彻底删除级联清理并回退官方 | 已验收（API） | 本机冒烟：归档回退官方、恢复、彻底删除计数、孤儿行检查 0 |
+| 安全 | A 不能读/改/删 B 的自定义角色；客户端不能提交系统提示词 | 已验收（API） | 本机冒烟跨用户读取角色/关系状态均 404；DTO 不含自由提示词字段 |
+
+> 沙箱限制：Mockito 在本环境会因 `MockMaker` 子进程/管道限制失败（12 个既有测试错误）；纯逻辑测试用 `-DforkCount=0` 通过。V4 已在本机 MySQL 8 执行并通过 API 冒烟；Electron 窗口视觉回归与 IndexedDB 迁移的真实浏览器验证仍需本机执行。
 
 ## 二、非功能验收
 
@@ -50,8 +67,12 @@
 | 会话列表/创建/删除 | 已实现 | 同上 |
 | 会话内消息 + SSE 流式回复 | 已实现 | 后端 SSE 已真实验收；发送后本地先展示用户消息（乐观渲染），落库后自动对齐；回复期间切走会话，返回后仍会看到该轮消息 |
 | 停止生成 | 已实现 | 取消接口已真实验收 |
-| 记忆页 / 活动页 | 已实现 | 同上 |
-| 心情 / 亲密度展示 | 已实现 | 对接 `/character-state` |
+| 记忆页 / 活动页 | 已实现 | 同上；记忆页默认按当前角色筛选，可切全部 |
+| 角色中心 / 角色编辑器 | 已实现 | 官方/我的角色/归档；四步创建与四标签编辑；脏状态守卫 |
+| 角色切换器 | 已实现 | 左栏/聊天头部/会话列表；只列未归档角色 |
+| 聊天/会话/通话/空态角色化 | 已实现 | 不再写死沈幼楚；关系状态按 `conversation.characterId` |
+| 官方形象本机覆盖 / 立绘按角色隔离 | 已实现 | `avatarStorage`、`portraitStorage` key 含 characterId；待 IndexedDB 冒烟 |
+| 心情 / 亲密度展示 | 已实现 | 对接 `/character-state?characterId` |
 | 删除账号 | 已实现 | 二次确认 + 后端级联已真实验收 |
 | 语音占位 | 已实现 | 后端链路已真实验收 |
 | 每账号 LLM 配置 | 已实现 | `GET/PUT/DELETE /api/v1/settings/llm`、`POST /test`；Key 不回显；待真实模型端到端 |
@@ -80,8 +101,27 @@ npm run dev
 
 > `npm test` 使用 tsc + Node 内置测试运行器，不需要 Electron 二进制；`build`/`dev` 需要完整安装。
 
+角色自定义的纯逻辑测试（沙箱可跑）：
+
+```cmd
+mvn -s .mvn-repo/settings.xml -DforkCount=0 -Dtest=CharacterPromptCompilerTest,CharacterValidatorTest,CharacterViewJsonTest,MemoryHeuristicTest test
+mvn -s .mvn-repo/settings.xml -DskipTests package
+
+cd apps\desktop
+npx tsc --noEmit
+npm test
+```
+
+角色 API 冒烟（需要运行中的 core 与 MySQL 8；会创建并在结束时删除测试账号）：
+
+```cmd
+powershell -ExecutionPolicy Bypass -File scripts\verify-character.ps1
+:: 非默认端口：-BaseUrl http://127.0.0.1:48082
+```
+
 ## 五、结论
 
 - **M0 后端 + M1 文本伴侣 + M2 语音占位链路：已真实验收通过**；
+- **角色自定义（P0 + P1 核心项）：后端 API 已在本机 MySQL 8 冒烟验收（V4 history=4；CRUD/复制/切换/归档/恢复/彻底删除/跨用户隔离/记忆按角色 32 项通过），后端编译与 21 个纯逻辑测试、前端类型检查与 84 个单元测试通过；Electron 视觉回归与 IndexedDB 迁移待本机验证**；
 - 剩余工作集中在：真实 ASR/TTS/LLM 效果与延迟实测、行为边界与情绪状态机增强、视觉（P1）、搜索（P1/P2）、对象存储与 Milvus 清理、运营审计；
 - 桌面端代码完成且类型检查通过，唯一未验证项是本机 Electron 构建与窗口联调（沙箱环境限制）。

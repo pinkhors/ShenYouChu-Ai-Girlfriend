@@ -77,3 +77,30 @@ export function saveAvatar(userId: string, config: AvatarConfig): void {
 export function clearAvatar(userId: string): void {
   store().clear(userId)
 }
+
+/* ---------------- 官方角色的本机形象覆盖 ---------------- */
+
+/**
+ * 官方角色的人设只读，但矢量形象保留旧版本的“本机覆盖”：
+ * 这样升级后老用户已经调好的沈幼楚不会在旧会话里换脸。
+ * 自定义角色的形象走服务端 avatarConfig，不使用这里。
+ */
+export function getOfficialAvatar(userId: string): AvatarConfig | null {
+  try {
+    const raw = window.localStorage.getItem(KEY_PREFIX + userId)
+    if (raw === null || raw === '') {
+      return null
+    }
+    return normalizeAvatar(deserializeAvatar(raw))
+  } catch {
+    return null
+  }
+}
+
+export function saveOfficialAvatar(userId: string, config: AvatarConfig): void {
+  store().set(userId, config)
+}
+
+export function clearOfficialAvatar(userId: string): void {
+  store().clear(userId)
+}

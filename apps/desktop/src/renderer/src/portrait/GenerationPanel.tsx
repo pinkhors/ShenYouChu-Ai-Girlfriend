@@ -14,6 +14,8 @@ import { PORTRAIT_SLOTS, type PortraitExpression } from './expression'
 interface GenerationPanelProps {
   /** 生成成功后直接写入对应槽位；返回 false 表示持久化失败。 */
   readonly onSave: (slot: PortraitExpression, dataUrl: string) => Promise<boolean>
+  /** 当前角色的基础提示词；不传则使用旧的沈幼楚默认值。 */
+  readonly basePrompt?: string
 }
 
 type BusyState = 'idle' | 'single' | 'batch'
@@ -28,9 +30,9 @@ function describeError(error: unknown): string {
 }
 
 /** AI 出图面板：ComfyUI（本地）或 OpenAI 兼容云 API，生成基础图与整组表情。 */
-export default function GenerationPanel({ onSave }: GenerationPanelProps) {
+export default function GenerationPanel({ onSave, basePrompt }: GenerationPanelProps) {
   const [config, setConfig] = useState<ImageGenerationConfig>(() => loadGenerationConfig())
-  const [prompt, setPrompt] = useState(DEFAULT_CHARACTER_PROMPT)
+  const [prompt, setPrompt] = useState(basePrompt ?? DEFAULT_CHARACTER_PROMPT)
   const [busy, setBusy] = useState<BusyState>('idle')
   const [progress, setProgress] = useState<{ current: number; total: number; label: string } | null>(null)
   const [error, setError] = useState<string | null>(null)

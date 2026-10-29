@@ -200,10 +200,13 @@ export interface ConversationPage {
 }
 
 /** 会话分页：默认第一页 20 条（最新在前）。 */
-export function listConversations(limit = 20, cursor?: string): Promise<ConversationPage> {
+export function listConversations(limit = 20, cursor?: string, characterId?: string): Promise<ConversationPage> {
   const query = new URLSearchParams({ limit: String(limit) })
   if (cursor !== undefined && cursor !== '') {
     query.set('cursor', cursor)
+  }
+  if (characterId !== undefined && characterId !== '') {
+    query.set('characterId', characterId)
   }
   return request<ConversationPage>(`/conversations?${query.toString()}`)
 }
@@ -306,6 +309,7 @@ export interface MemoryView {
   readonly status: string
   readonly createdAt: string
   readonly conversationId: string | null
+  readonly characterId: string | null
 }
 
 export interface ActivityEventView {
@@ -319,8 +323,13 @@ export interface ActivityEventView {
   readonly payload: string | null
 }
 
-export function listMemories(): Promise<MemoryView[]> {
-  return request<MemoryView[]>('/memories')
+export function listMemories(characterId?: string): Promise<MemoryView[]> {
+  const query = new URLSearchParams()
+  if (characterId !== undefined && characterId !== '') {
+    query.set('characterId', characterId)
+  }
+  const suffix = query.toString() === '' ? '' : `?${query.toString()}`
+  return request<MemoryView[]>(`/memories${suffix}`)
 }
 
 export function deleteMemory(id: string): Promise<void> {
@@ -368,9 +377,12 @@ export interface CharacterState {
   readonly stateVersion: number
 }
 
-/** 当前用户与默认角色的关系状态。 */
-export function getCharacterState(): Promise<CharacterState> {
-  return request<CharacterState>('/character-state')
+/** 当前用户与指定角色（不传则当前角色）的关系状态。 */
+export function getCharacterState(characterId?: string): Promise<CharacterState> {
+  const query = characterId === undefined || characterId === ''
+    ? ''
+    : `?characterId=${encodeURIComponent(characterId)}`
+  return request<CharacterState>(`/character-state${query}`)
 }
 
 /** 删除当前账号：服务端级联清理，返回后本地凭证必须立即清除。 */

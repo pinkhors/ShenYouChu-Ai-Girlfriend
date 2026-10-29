@@ -1,7 +1,7 @@
 package com.shenyouchu.core.conversation;
 
 import com.shenyouchu.core.activity.ActivityService;
-import com.shenyouchu.core.character.mapper.CharacterMapper;
+import com.shenyouchu.core.character.CharacterService;
 import com.shenyouchu.core.common.ApiException;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.memory.mapper.MemoryMapper;
@@ -22,7 +22,7 @@ class ConversationServiceTest {
     @Mock
     private ConversationMapper conversationMapper;
     @Mock
-    private CharacterMapper characterMapper;
+    private CharacterService characterService;
     @Mock
     private ActivityService activityService;
     @Mock
@@ -35,7 +35,7 @@ class ConversationServiceTest {
     @BeforeEach
     void setUp() {
         conversationService = new ConversationService(
-                conversationMapper, characterMapper, activityService, messageMapper, memoryMapper);
+                conversationMapper, characterService, activityService, messageMapper, memoryMapper);
     }
 
     @Test

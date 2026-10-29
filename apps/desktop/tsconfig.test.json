@@ -22,6 +22,8 @@
     "src/renderer/src/auth/tokenStore.ts",
     "src/renderer/src/avatar/avatarConfig.ts",
     "src/renderer/src/avatar/avatarStorage.ts",
+    "src/renderer/src/character/characterTypes.ts",
+    "src/renderer/src/character/personaPreview.ts",
     "src/renderer/src/portrait/expression.ts",
     "src/renderer/src/portrait/avatarSource.ts",
     "src/renderer/src/portrait/generationConfig.ts",

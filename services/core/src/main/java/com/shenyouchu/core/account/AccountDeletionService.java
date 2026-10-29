@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.shenyouchu.core.activity.ActivityService;
 import com.shenyouchu.core.auth.UserSession;
 import com.shenyouchu.core.auth.mapper.UserSessionMapper;
+import com.shenyouchu.core.character.CharacterProfile;
+import com.shenyouchu.core.character.mapper.CharacterMapper;
+import com.shenyouchu.core.character.mapper.UserPreferenceMapper;
 import com.shenyouchu.core.conversation.Conversation;
 import com.shenyouchu.core.conversation.mapper.ConversationMapper;
 import com.shenyouchu.core.llm.settings.mapper.UserLlmSettingsMapper;
@@ -24,6 +27,8 @@ import java.util.Map;
 /**
  * 账号删除：MySQL 内所有用户数据逻辑删除 + 活跃会话立即失效，
  * 派生存储通过 {@link AccountPurgePort} 扩展；删除过程写入活动事件（保留最小审计）。
+ *
+ * <p>角色矩阵：自定义角色与 user_preferences 一并清理；官方角色（owner_user_id 为 NULL）保留。
  */
 @Service
 public class AccountDeletionService {
@@ -35,6 +40,8 @@ public class AccountDeletionService {
     private final MemoryMapper memoryMapper;
     private final UserCharacterStateMapper stateMapper;
     private final UserLlmSettingsMapper llmSettingsMapper;
+    private final CharacterMapper characterMapper;
+    private final UserPreferenceMapper preferenceMapper;
     private final ActivityService activityService;
     private final List<AccountPurgePort> purgePorts;
 
@@ -45,6 +52,8 @@ public class AccountDeletionService {
                                   MemoryMapper memoryMapper,
                                   UserCharacterStateMapper stateMapper,
                                   UserLlmSettingsMapper llmSettingsMapper,
+                                  CharacterMapper characterMapper,
+                                  UserPreferenceMapper preferenceMapper,
                                   ActivityService activityService,
                                   List<AccountPurgePort> purgePorts) {
         this.userMapper = userMapper;
@@ -54,6 +63,8 @@ public class AccountDeletionService {
         this.memoryMapper = memoryMapper;
         this.stateMapper = stateMapper;
         this.llmSettingsMapper = llmSettingsMapper;
+        this.characterMapper = characterMapper;
+        this.preferenceMapper = preferenceMapper;
         this.activityService = activityService;
         this.purgePorts = purgePorts;
     }
@@ -73,6 +84,10 @@ public class AccountDeletionService {
         int states = stateMapper.delete(Wrappers.<UserCharacterState>lambdaQuery()
                 .eq(UserCharacterState::getUserId, userId));
         int llmSettings = llmSettingsMapper.deleteById(userId);
+        /* 只删自定义角色；官方角色 owner_user_id 为 NULL，不会被匹配。 */
+        int characters = characterMapper.delete(Wrappers.<CharacterProfile>lambdaQuery()
+                .eq(CharacterProfile::getOwnerUserId, userId));
+        int preferences = preferenceMapper.deleteById(userId);
 
         User user = userMapper.selectById(userId);
         if (user != null) {
@@ -87,6 +102,7 @@ public class AccountDeletionService {
 
         activityService.record(userId, "data.deletion_completed", "SYSTEM", "core", null, null, null,
                 Map.of("sessions", sessions, "messages", messages, "memories", memories,
-                        "conversations", conversations, "states", states, "llmSettings", llmSettings));
+                        "conversations", conversations, "states", states, "llmSettings", llmSettings,
+                        "characters", characters, "preferences", preferences));
     }
 }

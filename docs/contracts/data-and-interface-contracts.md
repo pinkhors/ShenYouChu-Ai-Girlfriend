@@ -12,7 +12,7 @@
 ### 1.1 标识与时间
 
 - 主键：雪花 ID（数据库 `BIGINT`，Java `Long`，见 [ADR-0005](../adr/0005-snowflake-ids.md)），全局唯一，不作为授权凭据；**API/JSON 中所有 ID 一律以字符串返回，避免 JavaScript 端丢失精度**；
-- 归属：所有用户私有数据含 `user_id`；系统模板表（如 `characters` 预设）可为空但需显式区分；
+- 归属：所有用户私有数据含 `user_id`；官方角色（`characters.owner_user_id IS NULL`）为系统模板，自定义角色归 `owner_user_id` 对应用户；
 - 时间：统一 UTC，数据库 `DATETIME(3)`；对外 API 使用 ISO 8601（带 `Z` 或偏移）；
 - 审计字段：所有业务表 `created_at`、`updated_at`、`deleted_at`（未删为 `NULL`）；
 - 事件类表另加 `occurred_at`：行为实际发生时间，与入库时间 `created_at` 区分；
@@ -62,17 +62,36 @@
 
 ### 2.2 characters
 
-角色模板与版本，全局只读数据。
+角色定义，承载“官方模板 + 用户自定义角色”。官方角色 `owner_user_id` 为 NULL、`is_public=true`、人设只读；自定义角色 `owner_user_id` 为当前用户、`is_public=false`、可编辑。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | BIGINT | 主键（雪花 ID） |
-| code | VARCHAR(64) | 唯一，如 `shenyouchu` |
-| display_name | VARCHAR(64) | 沈幼楚 |
-| persona_version | VARCHAR(20) | 人设版本 |
-| persona_config | JSON | 人设/提示词引用，不含密钥 |
-| is_public | BOOLEAN | 开源版本默认 true |
+| owner_user_id | BIGINT | NULL=官方；非 NULL=该用户的自定义角色 |
+| source_character_id | BIGINT | 可空，复制/模板来源，不参与权限判断 |
+| code | VARCHAR(64) | 唯一；官方如 `shenyouchu`，自定义为 `custom-<雪花ID>` |
+| display_name | VARCHAR(64) | 名称；同一 owner 下唯一，官方名保留 |
+| persona_version | VARCHAR(20) | 官方 `v1`；自定义 `custom-v1` |
+| persona_config | JSON | 官方沿用 v1（age/traits/speechStyle/background）；自定义保存 v2 结构化人设 |
+| avatar_config | JSON | 形象参数；官方预置默认值（本机可覆盖），自定义随账号保存 |
+| is_public | BOOLEAN | 官方 true；自定义永远 false |
+| status | VARCHAR(20) | active / archived；归档只作用于自定义角色 |
+| version | BIGINT | 乐观锁；PATCH 必须匹配，成功后 +1 |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
+
+索引：`UNIQUE(code)`、`UNIQUE(owner_user_id, display_name)`、`INDEX(owner_user_id, status)`、`INDEX(source_character_id)`；`owner_user_id` 外键指向 `users(id)`。
+
+### 2.2.1 user_preferences
+
+每个用户一条偏好，当前角色全局唯一。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| user_id | BIGINT | 主键，归属 |
+| active_character_id | BIGINT | 当前角色，可空；失效/归档时回退官方 |
+| created_at / updated_at | DATETIME(3) | 审计 |
+
+约束：`fk_user_preferences_user` → `users(id)`；`fk_user_preferences_character` → `characters(id) ON DELETE SET NULL`。没有 `deleted_at`，账号删除时物理删除该行。
 
 ### 2.3 user_character_states
 
@@ -102,7 +121,7 @@
 | status | VARCHAR(20) | active / archived |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
 
-索引：`INDEX(user_id, last_message_at)`。
+索引：`INDEX(user_id, last_message_at)`、`INDEX(user_id, character_id, last_message_at)`。
 
 ### 2.5 messages
 
@@ -132,6 +151,7 @@
 |---|---|---|
 | id | BIGINT | 主键（雪花 ID） |
 | user_id | BIGINT | 归属 |
+| character_id | BIGINT | 记忆归属角色，写入时从会话带入，可空（历史数据回填前） |
 | conversation_id | BIGINT | 来源会话，可空 |
 | source_message_id | BIGINT | 来源消息，可空 |
 | memory_type | VARCHAR(32) | preference / event / relationship / other |
@@ -141,7 +161,7 @@
 | embedding_dim | INT | 可空 |
 | created_at / updated_at / deleted_at | DATETIME(3) | 审计 |
 
-索引：`INDEX(user_id, memory_type, created_at)`。向量数据存 Milvus，`id` 与本文一致；**向量检索必须携带 user_id 过滤**，禁止先全局检索再应用层过滤作为唯一防线。
+索引：`INDEX(user_id, memory_type, created_at)`、`INDEX(user_id, character_id, created_at)`。向量数据存 Milvus，`id` 与本文一致；**向量检索必须携带 user_id 与 character_id 过滤**，禁止先全局检索再应用层过滤作为唯一防线。
 
 ### 2.7 media_sessions
 
@@ -284,8 +304,8 @@
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/conversations` | 当前用户会话分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor） |
-| POST | `/conversations` | 创建会话 |
+| GET | `/conversations` | 当前用户会话分页（`limit` 默认 20 最大 100，`cursor` 为上一页 nextCursor，`characterId` 可选筛选） |
+| POST | `/conversations` | 创建会话；`characterId` 不传用当前角色，必须为官方或本人所有且未归档 |
 | GET | `/conversations/{id}` | 详情（校验归属） |
 | DELETE | `/conversations/{id}` | 删除（逻辑删除，异步物理删除可选） |
 | GET | `/conversations/{id}/messages` | 消息分页（`limit` 默认 20 最大 100；默认返回最新一页，`cursor` 为上一页 nextCursor，用于继续向更早翻页） |
@@ -296,11 +316,58 @@
 
 `GET /conversations/{id}/messages` 默认返回**最新一页**，`items` 按时间升序返回（便于聊天界面自上而下渲染）；把 `nextCursor` 作为 `cursor` 传回即向更早的消息翻页。首次进入会话必须先看到最近的对话，历史只能靠翻页补齐。
 
+### 3.2.1 角色
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/characters?includeArchived=false` | 官方 + 当前用户自定义角色；每项含 `isOfficial`/`isActive`/`status` |
+| POST | `/characters` | 创建自定义角色 |
+| GET | `/characters/{id}` | 官方或本人角色详情 |
+| PATCH | `/characters/{id}` | 更新自定义角色；body 必须带 `version` |
+| POST | `/characters/{id}/duplicate` | 复制为我的角色；body 可带 `displayName`/`avatarConfig` |
+| POST | `/characters/{id}/archive` | 归档；若为当前角色，回退官方并返回新 `activeCharacterId` |
+| POST | `/characters/{id}/restore` | 恢复归档 |
+| POST | `/characters/{id}/purge` | 彻底删除；body `{confirmName}`，级联清理会话/消息/记忆/状态 |
+| PUT | `/preferences/active-character` | body `{characterId}`，切换当前角色 |
+
+规则：
+
+- 所有接口的 userId 都来自认证上下文；读取/修改/删除他人自定义角色统一 404 `CHARACTER_NOT_FOUND`；
+- 官方角色写操作 403 `CHARACTER_READONLY`；自定义角色上限 12 个（含归档）；
+- 名字 2–12 字、同用户唯一、不能与官方角色重名；年龄 18–45；intro ≤40；补充设定 ≤60；
+- `PATCH` 版本不一致 409 `CHARACTER_VERSION_CONFLICT`；归档角色开新会话 409 `CHARACTER_ARCHIVED`；
+- 角色定义只接受结构化字段，不接受 systemPrompt / personaPrompt / rawConfig 等自由提示词；
+- 官方角色列表始终返回；归档只过滤自定义角色；当前角色偏好失效或归档时读取回退官方。
+
+`CharacterView` 关键字段：
+
+```json
+{
+  "id": "1000000000000000002",
+  "code": "custom-1000000000000000002",
+  "displayName": "林晚",
+  "isOfficial": false,
+  "isActive": true,
+  "status": "active",
+  "age": 24,
+  "intro": "刚搬来这座城市，路痴但嘴硬。",
+  "tags": ["傲娇嘴硬", "小傲娇", "都市长大", "普通"],
+  "avatarConfig": { "skinTone": "natural", "outfitStyle": "knit" },
+  "personality": { "archetype": "tsundere", "modifiers": ["soft-tsundere"], "intensity": "medium", "initiative": "medium", "addressUser": "笨蛋", "selfRef": "我", "jealousy": "low" },
+  "family": { "growth": "city", "relations": "polite", "economy": "ordinary", "extraNote": "怕打雷" },
+  "version": 3,
+  "createdAt": "2026-10-28T09:00:00Z",
+  "updatedAt": "2026-10-28T10:00:00Z"
+}
+```
+
+官方角色的 `personality`/`family` 为 `null`，`tags` 由旧 `traits` 映射；不返回 `persona_config` 原文或提示词。自定义角色提示词由服务端 `CharacterPromptCompiler` 编译，固定安全边界永远最后追加。
+
 ### 3.3 记忆
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/memories` | 列表（可按类型/状态筛选） |
+| GET | `/memories` | 列表（`characterId` 可选，按角色筛选；不传返回全部） |
 | PATCH | `/memories/{id}` | 纠正内容（标记 corrected 并写入新版本） |
 | DELETE | `/memories/{id}` | 删除并同步移除向量 |
 
@@ -334,7 +401,7 @@
 | POST | `/settings/llm/test` | 用当前有效配置发一条最小请求，返回连通性与耗时 |
 | POST | `/data/deletion-requests` | 请求删除账号或指定资源，返回 jobId |
 | GET | `/data/deletion-requests/{jobId}` | 查询删除进度 |
-| GET | `/character-state` | 当前用户与默认角色的心情/亲密度（无记录返回初始值） |
+| GET | `/character-state` | 当前用户与指定角色的心情/亲密度（`characterId` 可选，不传用当前角色；无记录返回初始值） |
 | POST | `/account/deletion` | 删除当前账号：MySQL 级联逻辑删除、会话失效、Redis 清理（可选）、审计事件 |
 
 ### 3.7 用户级 LLM 配置（`/settings/llm`）
@@ -598,14 +665,15 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 
 ## 8. 数据删除矩阵
 
-| 存储 | 账号删除 | 单条录像删除 | 单条记忆删除 | 单会话删除 |
-|---|---|---|---|---|
-| MySQL | 删除/匿名化用户相关行 | 删除 recordings 行 | 删除 memories 行 | 级联 messages 等 |
-| Redis | 删除用户前缀 Key | 清理相关临时状态 | 清理召回缓存 | 清理会话状态 |
-| Milvus | 按 user_id 删除向量 | 无 | 删除对应向量 | 删除关联记忆向量 |
-| 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 删除对象 | 无 | 可选删除关联录像 |
-| 异步任务 | 取消/清理待执行任务 | 取消归档任务 | 无 | 取消整理任务 |
-| 日志/审计 | 保留最小删除审计 | 记录删除事件 | 记录删除事件 | 记录删除事件 |
+| 存储 | 账号删除 | 自定义角色彻底删除 | 单条录像删除 | 单条记忆删除 | 单会话删除 |
+|---|---|---|---|---|---|
+| MySQL | 删除/匿名化用户相关行；自定义角色逻辑删除、user_preferences 物理删除 | 物理删除角色及该角色的 conversations/messages/memories/user_character_states；当前角色先回退官方 | 删除 recordings 行 | 删除 memories 行 | 级联 messages 等 |
+| Redis | 删除用户前缀 Key | 清理角色相关临时状态（如有） | 清理相关临时状态 | 清理召回缓存 | 清理会话状态 |
+| Milvus | 按 user_id 删除向量 | 删除该角色向量（P2 接入后） | 无 | 删除对应向量 | 删除关联记忆向量 |
+| 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 无（立绘本机） | 删除对象 | 无 | 可选删除关联录像 |
+| 异步任务 | 取消/清理待执行任务 | 取消该角色整理任务 | 取消归档任务 | 无 | 取消整理任务 |
+| 本机 IndexedDB | 清理该用户全部立绘 | 清理该角色立绘 | 无 | 无 | 无 |
+| 日志/审计 | 保留最小删除审计 | 记录 character.purged（ID/名称/计数，不含正文） | 记录删除事件 | 记录删除事件 | 记录删除事件 |
 
 每项必须有自动化验证；删除任务可重试且幂等，完成后写入 `data.deletion_completed` 事件。
 
@@ -624,16 +692,19 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 9. A 的搜索查询永远不返回 B 的消息、记忆、活动或录像元数据；
 10. `operator` 缺少角色、缺少事由或超出授权范围时检索被拒绝，且不产生任何命中；
 11. 每次成功的运营检索都存在 `admin.search.performed` 审计事件，字段完整；
-12. A 无法读取、修改或测试 B 的 LLM 配置，A 的“测试连接”只使用 A 的有效配置。
+12. A 无法读取、修改或测试 B 的 LLM 配置，A 的“测试连接”只使用 A 的有效配置；
+13. A 无法读取/修改/删除 B 的自定义角色，A 无法用 B 的 characterId 创建会话或查询关系状态；
+14. 归档角色不出现在切换器/新建会话中，但已有会话仍可继续；彻底删除角色后会话、消息、记忆、状态与本机立绘无残留。
 
 ## 10. 隐私分级
 
 | 级别 | 数据 | 要求 |
 |---|---|---|
 | 高 | 密码哈希、对话正文、记忆、录像、音频 | 加密传输，最小访问，删除可级联，禁止进日志 |
+| 高 | 自定义角色设定（名字、性格、家庭背景、形象参数） | 仅本人可见；不进入用户搜索/运营检索；接口不回显他人角色 |
 | 高 | 用户 LLM 配置（含 `api_key`） | 仅服务端可读，接口不回显、禁止进日志；当前明文入库，备份与只读账号同样按高敏感数据保护 |
 | 中 | 视觉估计、活动事件、关系状态 | 归属明确，保留期，默认不公开 |
-| 低 | 角色模板、公开的模型元数据、公开文档 | 可公开 |
+| 低 | 官方角色模板、公开的模型元数据、公开文档 | 可公开 |
 
 搜索访问规则（ADR-0002）：
 

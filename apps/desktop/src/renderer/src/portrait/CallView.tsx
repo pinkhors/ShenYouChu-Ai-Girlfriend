@@ -36,6 +36,7 @@ interface CallViewProps {
   readonly portraits: PortraitSet | null
   readonly portraitsLoading: boolean
   readonly config: AvatarConfig
+  readonly characterName: string
   readonly characterState: CharacterState | null
   readonly onClose: () => void
 }
@@ -86,6 +87,7 @@ export default function CallView({
   portraits,
   portraitsLoading,
   config,
+  characterName,
   characterState,
   onClose
 }: CallViewProps) {
@@ -525,7 +527,7 @@ export default function CallView({
   const idleText = reply === '' ? '点击麦克风开始说话' : ''
 
   return (
-    <div className="call" role="dialog" aria-modal="true" aria-label="与沈幼楚通话">
+    <div className="call" role="dialog" aria-modal="true" aria-label={`与${characterName}通话`}>
       <header className="call__top">
         <button
           className="call__round"
@@ -559,6 +561,7 @@ export default function CallView({
               portraits={portraits}
               expression={displayExpression}
               variant="avatar"
+              name={characterName}
             />
           )}
         </div>

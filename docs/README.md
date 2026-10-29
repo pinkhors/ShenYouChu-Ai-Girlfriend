@@ -11,7 +11,7 @@
 | [04 验收清单](./04-acceptance-checklist.md) | 对照 PRD 的逐条验收状态与复现步骤 | 产品、测试、开发 |
 | [05 真实模型接入手册](./05-voice-and-model-integration.md) | LLM/ASR/TTS 接入协议、示例包装服务、延迟测量与排查 | 开发、运维 |
 | [06 行为边界测试集](./06-boundary-test-set.md) | 24 条敏感请求用例与期望行为，供接入真实模型后抽检 | 产品、测试 |
-| [07 女友角色设定设计](./07-character-customization.md) | 多角色模型、形象/性格/家庭选项、创建与切换流程、契约与迁移提案（待评审） | 产品、设计、开发、测试 |
+| [07 女友角色设定设计](./07-character-customization.md) | 多角色模型、形象/性格/家庭选项、创建与切换流程、契约与迁移；P0 + P1 核心项已实现 | 产品、设计、开发、测试 |
 | [CONTEXT.md](../CONTEXT.md) | 项目术语表 | 所有人 |
 | [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界、ADR-0003 MyBatis-Plus 持久化、ADR-0004 本地对象存储、ADR-0005 雪花主键） | 开发、评审 |
 

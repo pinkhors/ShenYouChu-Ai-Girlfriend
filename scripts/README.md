@@ -10,6 +10,7 @@
 | `verify-m1.ps1` | 后端 M1 验收：轮次、消息、记忆、活动事件、越权、SSE 流式 | 同上 |
 | `verify-m2.ps1` | 后端 M2 验收：语音占位链路（ASR→轮次→TTS）、非法 Base64、越权 | 同上 |
 | `verify-account-deletion.ps1` | 账号删除验收：数据清理、旧 token 失效、删除后无法登录 | 同上 |
+| `verify-character.ps1` | 角色自定义验收：官方只读、CRUD/版本冲突、切换、会话/记忆绑定、归档/恢复/彻底删除、跨用户隔离 | 同上；需 V4 迁移，脚本结束会删除测试账号 |
 | `demo.ps1` | 一键串联 M0/M1/M2/账号删除四步验收，任一步失败即中断 | 同上 |
 
 ## 使用
@@ -23,6 +24,7 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-m0.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-m1.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-m2.ps1
 powershell -ExecutionPolicy Bypass -File scripts\verify-account-deletion.ps1
+powershell -ExecutionPolicy Bypass -File scripts\verify-character.ps1
 
 # 一键验收（推荐）
 powershell -ExecutionPolicy Bypass -File scripts\demo.ps1

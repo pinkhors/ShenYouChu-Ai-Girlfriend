@@ -13,6 +13,8 @@ import { fileToDataUrl } from './image'
 interface PortraitStudioProps {
   readonly portraits: PortraitSet | null
   readonly heroImage: string | null
+  readonly characterName?: string
+  readonly basePrompt?: string
   readonly onSetHero: (dataUrl: string) => Promise<boolean>
   readonly onClearHero: () => Promise<boolean>
   /** 导入一张表情图；返回 false 表示持久化失败。 */
@@ -25,6 +27,8 @@ interface PortraitStudioProps {
 export default function PortraitStudio({
   portraits,
   heroImage,
+  characterName = '她',
+  basePrompt,
   onSetHero,
   onClearHero,
   onImport,
@@ -167,7 +171,7 @@ export default function PortraitStudio({
               </button>
             </div>
           ) : (
-            <img className="studio__image" src={preview} alt={`沈幼楚 · ${selectedLabel}`} />
+            <img className="studio__image" src={preview} alt={`${characterName} · ${selectedLabel}`} />
           )}
         </div>
         <div className="studio__caption">
@@ -178,7 +182,7 @@ export default function PortraitStudio({
 
       <aside className="studio__side">
         <div className="studio__intro">
-          <h2 className="studio__title">她的立绘</h2>
+          <h2 className="studio__title">{characterName}的立绘</h2>
           <p className="muted">
             导入 AI 生成的同一角色、不同表情；通话时按心情和操作切换。缺失的表情会自动回退到基础图。
           </p>
@@ -230,7 +234,7 @@ export default function PortraitStudio({
           <p className="hero-cutout__hint">纯色/简单背景效果最好；复杂背景会残留。</p>
         </div>
 
-        <GenerationPanel onSave={onImport} />
+        <GenerationPanel onSave={onImport} basePrompt={basePrompt} />
 
         <div className="slot-grid">
           {PORTRAIT_SLOTS.map((slot) => {
@@ -303,7 +307,7 @@ export default function PortraitStudio({
             <Icon name="trash" size={16} />
             {busy === 'clear' ? '清空中…' : '清空全部立绘'}
           </button>
-          <span className="muted">立绘只保存在本机，按用户隔离。</span>
+          <span className="muted">立绘只保存在本机，按角色隔离。</span>
         </div>
       </aside>
     </section>

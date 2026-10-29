@@ -10,6 +10,7 @@ interface AvatarPortraitProps {
   readonly variant?: 'portrait' | 'avatar'
   readonly size?: number
   readonly className?: string
+  readonly name?: string
 }
 
 /**
@@ -22,7 +23,8 @@ export default function AvatarPortrait({
   expression = 'neutral',
   variant = 'portrait',
   size,
-  className
+  className,
+  name = '沈幼楚'
 }: AvatarPortraitProps) {
   const source = resolvePortrait(portraits, expression)
   const [failedSource, setFailedSource] = useState<string | null>(null)
@@ -34,6 +36,7 @@ export default function AvatarPortrait({
         variant={variant}
         size={size}
         className={className}
+        name={name}
       />
     )
   }
@@ -43,7 +46,7 @@ export default function AvatarPortrait({
     <img
       className={classes}
       src={source}
-      alt="沈幼楚"
+      alt={name}
       width={size}
       height={size}
       draggable={false}

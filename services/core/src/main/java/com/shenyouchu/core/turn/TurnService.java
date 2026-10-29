@@ -84,7 +84,8 @@ public class TurnService {
         activityService.record(userId, "message.sent", "USER", "core", conversationId, turnId, null,
                 Map.of("messageId", String.valueOf(userMessage.getId()), "role", "user"));
 
-        if (memoryService.rememberFromTurn(userId, conversationId, userMessage.getId(), text)) {
+        if (memoryService.rememberFromTurn(userId, conversationId, conversation.getCharacterId(),
+                userMessage.getId(), text)) {
             activityService.record(userId, "memory.created", "SYSTEM", "core", conversationId, turnId, null,
                     Map.of("sourceMessageId", String.valueOf(userMessage.getId())));
         }

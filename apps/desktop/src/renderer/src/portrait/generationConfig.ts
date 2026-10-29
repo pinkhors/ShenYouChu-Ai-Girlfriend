@@ -1,4 +1,11 @@
 import {
+  HAIR_COLORS,
+  HAIR_STYLES,
+  EYE_COLORS,
+  OUTFIT_STYLES,
+  type AvatarConfig
+} from '../avatar/avatarConfig'
+import {
   PORTRAIT_SLOTS,
   type PortraitExpression
 } from './expression'
@@ -27,6 +34,43 @@ export interface ImageGenerationConfig {
 
 export const DEFAULT_CHARACTER_PROMPT =
   '半写实风格，25 岁亚洲女性，温柔小傲娇，长直黑发，琥珀色眼睛，米白色针织衫，正面半身像，柔和室内光，浅灰纯色背景，细腻皮肤质感，同一角色，同一构图'
+
+function labelOf<T extends { readonly id: string; readonly label: string }>(
+  list: readonly T[],
+  id: string
+): string {
+  return list.find((item) => item.id === id)?.label ?? ''
+}
+
+/**
+ * 按当前角色拼装出图基础提示词。
+ * 用户仍可在生成面板里改；这里只保证不同角色的默认外观不会生成同一张脸。
+ */
+export function buildCharacterBasePrompt(
+  name: string,
+  age: number,
+  avatar: AvatarConfig
+): string {
+  const hair = labelOf(HAIR_STYLES, avatar.hairStyle)
+  const hairColor = labelOf(HAIR_COLORS, avatar.hairColor)
+  const eyes = labelOf(EYE_COLORS, avatar.eyeColor)
+  const outfit = labelOf(OUTFIT_STYLES, avatar.outfitStyle)
+  return [
+    '半写实风格',
+    `${age} 岁亚洲女性`,
+    name.trim() === '' ? '' : `角色名：${name.trim()}`,
+    `${hairColor}${hair}`,
+    `${eyes}眼睛`,
+    `${outfit}`,
+    '正面半身像',
+    '柔和室内光',
+    '浅灰纯色背景',
+    '细腻皮肤质感',
+    '同一角色，同一构图'
+  ]
+    .filter((part) => part !== '')
+    .join('，')
+}
 
 export const DEFAULT_NEGATIVE_PROMPT =
   '低质量，模糊，畸形手指，多余肢体，水印，文字，多人，强对比阴影，过度锐化'

@@ -32,7 +32,9 @@ export const HAIR_STYLES = [
   { id: 'long-wave', label: '波浪长发' },
   { id: 'bob', label: '齐肩短发' },
   { id: 'twin-tails', label: '双马尾' },
-  { id: 'updo', label: '低盘发' }
+  { id: 'updo', label: '低盘发' },
+  { id: 'ponytail', label: '高马尾' },
+  { id: 'short', label: '利落短发' }
 ] as const
 
 export type HairStyleId = (typeof HAIR_STYLES)[number]['id']
@@ -74,6 +76,46 @@ export const OUTFIT_COLORS = [
 
 export type OutfitColorId = (typeof OUTFIT_COLORS)[number]['id']
 
+export const OUTFIT_STYLES = [
+  {
+    id: 'casual',
+    label: '日常休闲',
+    hint: 'T 恤或衬衫，松弛邻家'
+  },
+  {
+    id: 'knit',
+    label: '温柔针织',
+    hint: '针织开衫，柔软垂坠'
+  },
+  {
+    id: 'campus',
+    label: '校园清纯',
+    hint: '衬衫与百褶裙，清爽'
+  },
+  {
+    id: 'commute',
+    label: '通勤简约',
+    hint: '西装外套，利落低饱和'
+  },
+  {
+    id: 'home',
+    label: '居家慵懒',
+    hint: '宽松卫衣，舒适'
+  },
+  {
+    id: 'vintage',
+    label: '复古文艺',
+    hint: '复古连衣裙，胶片感'
+  },
+  {
+    id: 'sporty',
+    label: '运动活力',
+    hint: '运动外套，轻快'
+  }
+] as const
+
+export type OutfitStyleId = (typeof OUTFIT_STYLES)[number]['id']
+
 export const ACCESSORIES = [
   { id: 'none', label: '无' },
   { id: 'earrings', label: '耳饰' },
@@ -100,6 +142,7 @@ export interface AvatarConfig {
   readonly lipFullness: number
   /** 0 = 无腮红，1 = 明显 */
   readonly blush: number
+  readonly outfitStyle: OutfitStyleId
   readonly outfitColor: OutfitColorId
   readonly accessory: AccessoryId
 }
@@ -116,6 +159,7 @@ export const DEFAULT_AVATAR: AvatarConfig = {
   lipColor: 'rose',
   lipFullness: 0.5,
   blush: 0.35,
+  outfitStyle: 'casual',
   outfitColor: 'cream',
   accessory: 'none'
 }
@@ -141,6 +185,7 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
       browStyle: 'soft',
       lipColor: 'coral',
       blush: 0.45,
+      outfitStyle: 'knit',
       outfitColor: 'cream',
       accessory: 'hairpin'
     }
@@ -159,6 +204,7 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
       lipColor: 'berry',
       lipFullness: 0.4,
       blush: 0.18,
+      outfitStyle: 'commute',
       outfitColor: 'navy',
       accessory: 'earrings'
     }
@@ -177,6 +223,7 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
       browStyle: 'arch',
       lipColor: 'coral',
       blush: 0.55,
+      outfitStyle: 'sporty',
       outfitColor: 'blush',
       accessory: 'hairpin'
     }
@@ -195,6 +242,7 @@ export const AVATAR_PRESETS: readonly AvatarPreset[] = [
       lipColor: 'nude',
       lipFullness: 0.35,
       blush: 0.22,
+      outfitStyle: 'campus',
       outfitColor: 'sage',
       accessory: 'glasses'
     }
@@ -222,6 +270,7 @@ const EYE_IDS = EYE_COLORS.map((item) => item.id)
 const BROW_IDS = BROW_STYLES.map((item) => item.id)
 const LIP_IDS = LIP_COLORS.map((item) => item.id)
 const OUTFIT_IDS = OUTFIT_COLORS.map((item) => item.id)
+const OUTFIT_STYLE_IDS = OUTFIT_STYLES.map((item) => item.id)
 const ACCESSORY_IDS = ACCESSORIES.map((item) => item.id)
 
 /** 把任意来源（本地存储、旧版本、手改 JSON）的数据收敛为合法配置。 */
@@ -241,6 +290,7 @@ export function normalizeAvatar(value: unknown): AvatarConfig {
     lipColor: oneOf(value.lipColor, LIP_IDS, DEFAULT_AVATAR.lipColor),
     lipFullness: numberIn(value.lipFullness, DEFAULT_AVATAR.lipFullness),
     blush: numberIn(value.blush, DEFAULT_AVATAR.blush),
+    outfitStyle: oneOf(value.outfitStyle, OUTFIT_STYLE_IDS, DEFAULT_AVATAR.outfitStyle),
     outfitColor: oneOf(value.outfitColor, OUTFIT_IDS, DEFAULT_AVATAR.outfitColor),
     accessory: oneOf(value.accessory, ACCESSORY_IDS, DEFAULT_AVATAR.accessory)
   }
@@ -285,6 +335,7 @@ export function randomizeAvatar(random: () => number = Math.random): AvatarConfi
     lipColor: pick(LIP_COLORS, random).id,
     lipFullness: rounded(0.25 + random() * 0.6),
     blush: rounded(0.1 + random() * 0.5),
+    outfitStyle: pick(OUTFIT_STYLES, random).id,
     outfitColor: pick(OUTFIT_COLORS, random).id,
     accessory: pick(ACCESSORIES, random).id
   }
@@ -307,7 +358,7 @@ export function describeAvatar(config: AvatarConfig): string {
     labelOf(HAIR_STYLES, config.hairStyle),
     labelOf(HAIR_COLORS, config.hairColor),
     labelOf(EYE_COLORS, config.eyeColor) + '眼睛',
-    labelOf(LIP_COLORS, config.lipColor) + '唇色'
+    labelOf(OUTFIT_STYLES, config.outfitStyle)
   ].join(' · ')
 }
 
@@ -329,4 +380,8 @@ export function lipColorOf(id: LipColorId): (typeof LIP_COLORS)[number] {
 
 export function outfitColorOf(id: OutfitColorId): (typeof OUTFIT_COLORS)[number] {
   return OUTFIT_COLORS.find((item) => item.id === id) ?? OUTFIT_COLORS[0]
+}
+
+export function outfitStyleOf(id: OutfitStyleId): (typeof OUTFIT_STYLES)[number] {
+  return OUTFIT_STYLES.find((item) => item.id === id) ?? OUTFIT_STYLES[0]
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import {
   ApiError,
   cancelTurn,
@@ -8,7 +8,7 @@ import {
   type Conversation,
   type Message
 } from './api/client'
-import type { AvatarConfig } from './avatar/avatarConfig'
+import type { CharacterView } from './character/characterTypes'
 import { prependOlderMessages } from './chat/messagePages'
 import { dropHandoffMessage, handoffPendingMessages, takePendingMessages } from './chat/pendingHandoff'
 import {
@@ -25,11 +25,12 @@ import { formatClock, formatTime } from './ui/time'
 
 interface ChatViewProps {
   readonly conversation: Conversation
-  readonly avatar: AvatarConfig
+  readonly character: CharacterView
   readonly portraits: PortraitSet | null
   readonly heroImage: string | null
   readonly characterState: CharacterState | null
   readonly userName: string
+  readonly characterSwitcher?: ReactNode
   readonly onCall: () => void
   /** 后台轮次落库后的通知：让应用层刷新会话列表，并按需重新加载当前会话 */
   readonly onTurnSettled: (conversationId: string) => void
@@ -56,11 +57,12 @@ function clampPercent(value: number): number {
 /** 会话详情：历史消息分页、SSE 流式回复、停止生成与语音占位入口。 */
 export default function ChatView({
   conversation,
-  avatar,
+  character,
   portraits,
   heroImage,
   characterState,
   userName,
+  characterSwitcher,
   onCall,
   onTurnSettled,
   reloadToken
@@ -263,13 +265,13 @@ export default function ChatView({
   const heroSource = heroImage ?? resolvePortrait(portraits, 'neutral')
 
   return (
-    <section className="chat chat--rose" aria-label={`与沈幼楚的会话：${conversation.title ?? '未命名会话'}`}>
+    <section className="chat chat--rose" aria-label={`与${character.displayName}的会话：${conversation.title ?? '未命名会话'}`}>
       <header className="chat__topbar">
         <div className="chat__brand">
           <span className="chat__heart" aria-hidden="true">
             ♥
           </span>
-          <span className="chat__name">沈幼楚</span>
+          {characterSwitcher ?? <span className="chat__name">{character.displayName}</span>}
           <span className="chat__online">在线</span>
         </div>
         <div className="chat__top-actions">
@@ -306,7 +308,7 @@ export default function ChatView({
           <img
             className={heroImage !== null ? 'chat__hero-image chat__hero-image--cutout' : 'chat__hero-image'}
             src={heroSource}
-            alt="沈幼楚"
+            alt={character.displayName}
             draggable={false}
             onError={() => {
               setHeroFailed(heroSource)
@@ -314,11 +316,16 @@ export default function ChatView({
           />
         ) : (
           <div className="chat__hero-fallback">
-            <AvatarPortrait config={avatar} portraits={portraits} variant="portrait" />
+            <AvatarPortrait
+              config={character.avatarConfig}
+              portraits={portraits}
+              variant="portrait"
+              name={character.displayName}
+            />
           </div>
         )}
         <div className="chat__hero-caption">
-          <strong>沈幼楚</strong>
+          <strong>{character.displayName}</strong>
           <span>{conversation.title ?? '今天也在陪你'}</span>
         </div>
         <button className="chat__hero-call" type="button" onClick={onCall}>
@@ -386,7 +393,12 @@ export default function ChatView({
                     </span>
                   ) : (
                     <span className="bubble-avatar">
-                      <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
+                      <AvatarPortrait
+                      config={character.avatarConfig}
+                      portraits={portraits}
+                      variant="avatar"
+                      name={character.displayName}
+                    />
                     </span>
                   )}
                   <div className={isUser ? 'bubble bubble--user' : 'bubble bubble--assistant'}>
@@ -401,9 +413,14 @@ export default function ChatView({
             {isSending && streamingText === '' && (
               <li className="message message--assistant">
                 <span className="bubble-avatar">
-                  <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
+                  <AvatarPortrait
+                    config={character.avatarConfig}
+                    portraits={portraits}
+                    variant="avatar"
+                    name={character.displayName}
+                  />
                 </span>
-                <div className="bubble bubble--assistant bubble--typing" role="status" aria-label="沈幼楚正在输入…">
+                <div className="bubble bubble--assistant bubble--typing" role="status" aria-label={`${character.displayName}正在输入…`}>
                   <span className="typing" aria-hidden="true">
                     <i />
                     <i />
@@ -415,7 +432,12 @@ export default function ChatView({
             {streamingText !== '' && (
               <li className="message message--assistant">
                 <span className="bubble-avatar">
-                  <AvatarPortrait config={avatar} portraits={portraits} variant="avatar" />
+                  <AvatarPortrait
+                    config={character.avatarConfig}
+                    portraits={portraits}
+                    variant="avatar"
+                    name={character.displayName}
+                  />
                 </span>
                 <div className="bubble bubble--assistant">
                   <p className="bubble__text">
@@ -434,7 +456,7 @@ export default function ChatView({
         <textarea
           className="composer__input"
           rows={1}
-          placeholder="给沈幼楚发送消息…（Enter 发送，Shift+Enter 换行）"
+          placeholder={`给${character.displayName}发送消息…（Enter 发送，Shift+Enter 换行）`}
           maxLength={2000}
           value={draft}
           disabled={isSending}

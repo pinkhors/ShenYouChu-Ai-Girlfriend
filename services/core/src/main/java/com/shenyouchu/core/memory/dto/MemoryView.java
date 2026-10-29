@@ -5,7 +5,7 @@ import com.shenyouchu.core.memory.Memory;
 import java.time.Instant;
 
 public record MemoryView(String id, String memoryType, String content, String status,
-                         Instant createdAt, String conversationId) {
+                         Instant createdAt, String conversationId, String characterId) {
 
     public static MemoryView from(Memory memory) {
         return new MemoryView(
@@ -14,6 +14,7 @@ public record MemoryView(String id, String memoryType, String content, String st
                 memory.getContent(),
                 memory.getStatus(),
                 memory.getCreatedAt(),
-                memory.getConversationId() == null ? null : String.valueOf(memory.getConversationId()));
+                memory.getConversationId() == null ? null : String.valueOf(memory.getConversationId()),
+                memory.getCharacterId() == null ? null : String.valueOf(memory.getCharacterId()));
     }
 }

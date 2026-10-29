@@ -12,6 +12,8 @@ import java.util.List;
 /**
  * 记忆写入与查询。M1 用确定性关键词规则做提取，保证链路可验证；
  * 后续替换为 LLM 提取 + Embedding 向量化（P2），接口保持不变。
+ *
+ * <p>记忆挂角色：写入时由会话带入 character_id；列表可按角色筛选，避免跨角色串记忆。
  */
 @Service
 public class MemoryService {
@@ -46,8 +48,16 @@ public class MemoryService {
         return null;
     }
 
+    /** 兼容旧调用：没有角色上下文时 character_id 留空。 */
     @Transactional
     public boolean rememberFromTurn(Long userId, Long conversationId, Long sourceMessageId, String userText) {
+        return rememberFromTurn(userId, conversationId, null, sourceMessageId, userText);
+    }
+
+    /** 一轮对话写入记忆：characterId 从会话带入。 */
+    @Transactional
+    public boolean rememberFromTurn(Long userId, Long conversationId, Long characterId,
+                                    Long sourceMessageId, String userText) {
         String type = classify(userText);
         if (type == null) {
             return false;
@@ -56,14 +66,21 @@ public class MemoryService {
         if (content.length() > MAX_CONTENT) {
             content = content.substring(0, MAX_CONTENT);
         }
-        memoryMapper.insert(new Memory(userId, conversationId, sourceMessageId, type, content));
+        memoryMapper.insert(new Memory(userId, characterId, conversationId, sourceMessageId, type, content));
         return true;
     }
 
     @Transactional(readOnly = true)
     public List<MemoryView> list(Long userId) {
+        return list(userId, null);
+    }
+
+    /** characterId 可选：只返回该角色的记忆；不传则返回当前用户全部记忆。 */
+    @Transactional(readOnly = true)
+    public List<MemoryView> list(Long userId, Long characterId) {
         return memoryMapper.selectList(Wrappers.<Memory>lambdaQuery()
                         .eq(Memory::getUserId, userId)
+                        .eq(characterId != null, Memory::getCharacterId, characterId)
                         .orderByDesc(Memory::getCreatedAt))
                 .stream()
                 .map(MemoryView::from)
