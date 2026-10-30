@@ -14,6 +14,16 @@
 | [07 女友角色设定设计](./07-character-customization.md) | 多角色模型、形象/性格/家庭选项、创建与切换流程、契约与迁移；P0 + P1 核心项已实现 | 产品、设计、开发、测试 |
 | [08 记忆星图](./08-memory-graph.md) | 记忆分块/向量/话题实体管线、GraphProjector 快照、星图 API 与前端 v0；P1 设计 | 产品、设计、开发、测试 |
 | [09 表达温度与主动消息](./09-expression-temperature-and-proactive-message.md) | 角色形象/性格推导 temperature、用户覆盖、主动开口策略与受控端点；P1 实现基线 | 产品、设计、开发、测试 |
+| [10 声音克隆（Genie-TTS）引入方案](./10-voice-cloning-genie-tts.md) | 参考插件评估、引擎/自研取舍、声音档案与接口；**已被 12 取代，仅存档** | 产品、设计、开发、测试 |
+| [11 声音克隆：对话与唱歌双模式](./11-voice-clone-dialogue-and-singing.md) | 对话/唱歌场景、TTS+SVC/SVS、音色/音准/节奏/情感；**已被 12 取代，仅存档** | 产品、设计、开发、测试 |
+| [12 Breeze TTS 2 重构方案](./12-breeze-tts-2-redesign.md) | Breeze API 能力边界与调用、语音发送/唱一句；Breeze-only 基线，最终方案见 14 | 产品、设计、开发、测试 |
+| [13 双云 TTS 方案评估](./13-dual-cloud-tts-evaluation.md) | CosyVoice/Qwen + Breeze 的可行性、成本/易用性、音色一致性与本地化；评估完成，决策见 14 | 产品、设计、开发、测试 |
+| [14 语音方案定稿](./14-voice-final-design.md) | CosyVoice 说话 + Breeze 唱句、统一后端 API/WS、克隆/异步唱句；架构基线，BYOK 见 15 | 产品、设计、开发、测试 |
+| [15 BYOK 落地决策](./15-byok-launch-decisions.md) | 用户自带 Key/自付费、Breeze 开关默认关、7 天保留、导出 AI 标识、电平口型；待评审 | 产品、设计、开发、测试 |
+| [16 语音生成工作台](./16-voice-generation-mode-ui.md) | 双模型卡片、三种生成模式、交互状态与切换逻辑；待评审 | 产品、设计、开发、测试 |
+| [17 语音模块化架构](./17-modular-voice-architecture.md) | Provider/能力注册、接口约定、扩展点、当前扩展风险与迁移路径；待评审 | 产品、设计、开发、测试 |
+| [18 能力盘点与设计评估](./18-capability-audit-and-design-review.md) | 全项目缺失/新增/优化项按 P0–P2 排序、缺陷清单、替代方案与路线建议；只读评估 | 产品、设计、开发、测试 |
+| [19 鲸鱼娘自主浏览与行为面板 PRD](./19-whale-girl-autonomous-watch-prd.md) | 陪看与自主浏览、行为事件与统计面板、内容理解流水线（评论→字幕→OCR）、记忆回流与主动消息；待评审 | 产品、设计、开发、测试 |
 | [CONTEXT.md](../CONTEXT.md) | 项目术语表 | 所有人 |
 | [docs/adr/](./adr/) | 架构决策记录（ADR-0001 前端 React、ADR-0002 运营检索边界、ADR-0003 MyBatis-Plus 持久化、ADR-0004 本地对象存储、ADR-0005 雪花主键） | 开发、评审 |
 
