@@ -3,6 +3,7 @@ package com.shenyouchu.core.voice.provider;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shenyouchu.core.common.ApiException;
+import com.shenyouchu.core.voice.provider.mapper.VoiceCredentialMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

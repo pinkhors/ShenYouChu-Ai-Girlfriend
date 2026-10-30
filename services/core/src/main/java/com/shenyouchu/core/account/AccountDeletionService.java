@@ -19,7 +19,7 @@ import com.shenyouchu.core.relationship.mapper.UserCharacterStateMapper;
 import com.shenyouchu.core.user.User;
 import com.shenyouchu.core.user.mapper.UserMapper;
 import com.shenyouchu.core.voice.provider.VoiceCredential;
-import com.shenyouchu.core.voice.provider.VoiceCredentialMapper;
+import com.shenyouchu.core.voice.provider.mapper.VoiceCredentialMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

@@ -1,6 +1,7 @@
-package com.shenyouchu.core.voice.provider;
+package com.shenyouchu.core.voice.provider.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.shenyouchu.core.voice.provider.VoiceCredential;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
