@@ -458,7 +458,14 @@
 |---|---|---|
 | GET | `/memories` | 列表（`characterId` 可选，按角色筛选；不传返回全部） |
 | PATCH | `/memories/{id}` | 纠正内容（标记 corrected 并写入新版本） |
-| DELETE | `/memories/{id}` | 删除并同步移除向量 |
+| DELETE | `/memories/{id}` | **真删**：逻辑删除 memories 行，并**物理删除**由该条派生的 `memory_chunks`（按 `user_message_id`/`assistant_message_id` 命中）、相关 `memory_edges` 与 `memory_recall_events`，随后重建受影响角色的星图快照；204 |
+
+> **删除语义（实现于 `MemoryService.delete` → `MemoryForgetPort` → `MemoryChunkForgetAdapter`）**
+>
+> - 与星图的「忘记」（`POST /memory-graph/chunks/{id}/forget`，只写 `invalid_at`、保留幽灵星）是**两种语义**，不可互相替代；
+> - `source_message_id` 为空的历史数据无法定位 chunk，只删 memories 行并记 debug 日志（可接受的数据缺口，需在回填时补齐）；
+> - 所有删除按 `user_id` 限定，越权删除返回 404；
+> - 验收：删除后下一轮召回与注入中不得出现该内容（`docs/20` A-3）。
 
 ### 3.3.1 记忆星图（`/memory-graph`）
 
@@ -785,6 +792,7 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 - 检索必须携带 `user_id == 当前用户` 过滤条件；
 - 维度与模型名随 Embedding 适配器版本记录，禁止混用不同维度索引；
 - 删除记忆时同步删除向量（或标记并异步清理，需可验证）。
+- 当前实现不引入独立向量库：向量随 `memory_chunks` 行存放（`embedding_json`），因此**删除 chunk 行即删除向量**；`DELETE /memories/{id}` 通过派生清理把对应 chunk 物理删除（见 §3.3 删除语义）。
 
 ### 7.3 对象存储（S3 兼容）
 
@@ -797,9 +805,9 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 
 | 存储 | 账号删除 | 自定义角色彻底删除 | 单条录像删除 | 单条记忆删除 | 会话清空（不删除会话） |
 |---|---|---|---|---|---|
-| MySQL | 删除/匿名化用户相关行；自定义角色逻辑删除、user_preferences 物理删除 | 物理删除角色及该角色的 conversations/messages/memories/user_character_states；当前角色先回退官方 | 删除 recordings 行 | 删除 memories 行 | 逻辑删除该会话 messages/memories；会话行保留，title/last_message_at 置空 |
+| MySQL | 删除/匿名化用户相关行；自定义角色逻辑删除、user_preferences 物理删除 | 物理删除角色及该角色的 conversations/messages/memories/user_character_states；当前角色先回退官方 | 删除 recordings 行 | 删除 memories 行 + **物理删除派生 memory_chunks/memory_edges/memory_recall_events 并重建星图快照** | 逻辑删除该会话 messages/memories；会话行保留，title/last_message_at 置空 |
 | Redis | 删除用户前缀 Key | 清理角色相关临时状态（如有） | 清理相关临时状态 | 清理召回缓存 | 清理会话状态 |
-| Milvus | 按 user_id 删除向量 | 删除该角色向量（P2 接入后） | 无 | 删除对应向量 | 删除该会话关联记忆向量（P2 接入后） |
+| Milvus | 按 user_id 删除向量 | 删除该角色向量（P2 接入后） | 无 | 删除对应向量（当前向量随 chunk 行存储，删行即删） | 删除该会话关联记忆向量（P2 接入后） |
 | 对象存储（S3 兼容） | 清理 `users/{userId}/` 前缀 | 无（立绘本机） | 删除对象 | 无 | 无 |
 | 异步任务 | 取消/清理待执行任务 | 取消该角色整理任务 | 取消归档任务 | 无 | 取消整理任务 |
 | 本机 IndexedDB | 清理该用户全部立绘 | 清理该角色立绘 | 无 | 无 | 无 |
