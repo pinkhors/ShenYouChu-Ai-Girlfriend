@@ -607,3 +607,123 @@ export function resetLlmSettings(): Promise<void> {
 export function testLlmSettings(): Promise<LlmTestResult> {
   return request<LlmTestResult>('/settings/llm/test', { method: 'POST' })
 }
+
+/* ── 语音工作台（docs/17-modular-voice-architecture.md）────────────────────── */
+
+export type VoiceCapability = 'SPEAK' | 'SING' | 'HUM'
+export type VoiceFieldType = 'TEXT' | 'PASSWORD' | 'SELECT' | 'TEXTAREA' | 'NUMBER' | 'SWITCH'
+export type GenerationMode = 'single' | 'single_two' | 'dual'
+
+export interface VoiceFieldOption {
+  readonly value: string
+  readonly label: string
+}
+
+export interface VoiceFieldSchema {
+  readonly key: string
+  readonly label: string
+  readonly type: VoiceFieldType
+  readonly required: boolean
+  readonly secret: boolean
+  readonly placeholder: string | null
+  readonly options: readonly VoiceFieldOption[] | null
+  readonly help: string | null
+  readonly maxLength: number | null
+  readonly defaultValue: string | null
+}
+
+export interface VoiceProviderDescriptor {
+  readonly id: string
+  readonly displayName: string
+  readonly description: string
+  readonly capabilities: readonly VoiceCapability[]
+  readonly credentialFields: readonly VoiceFieldSchema[]
+  readonly generationFields: Readonly<Partial<Record<VoiceCapability, readonly VoiceFieldSchema[]>>>
+  readonly languages: readonly string[]
+  readonly maxTextChars: number
+  readonly enabled: boolean
+}
+
+export interface VoiceCredentialView {
+  readonly providerId: string
+  readonly configured: boolean
+  readonly status: string
+  readonly lastVerifiedAt: string | null
+  readonly values: Readonly<Record<string, string>>
+  readonly configuredSecrets: readonly string[]
+}
+
+export interface VoiceProviderView {
+  readonly descriptor: VoiceProviderDescriptor
+  readonly credential: VoiceCredentialView
+}
+
+export interface VoiceSegmentView {
+  readonly id: string
+  readonly providerId: string
+  readonly capability: VoiceCapability
+  readonly status: string
+  readonly audioBase64: string | null
+  readonly format: string | null
+  readonly durationMs: number | null
+  readonly errorCode: string | null
+  readonly message: string | null
+}
+
+export interface VoiceBatchView {
+  readonly batchId: string
+  readonly status: string
+  readonly createdAt: string
+  readonly expiresAt: string
+  readonly segments: readonly VoiceSegmentView[]
+}
+
+export interface VoiceValidationView {
+  readonly valid: boolean
+  readonly message: string | null
+}
+
+export interface VoiceSegmentInput {
+  readonly id: string
+  readonly providerId: string
+  readonly capability: VoiceCapability
+  readonly text: string
+  readonly params: Readonly<Record<string, string>>
+}
+
+export function listVoiceProviders(): Promise<VoiceProviderView[]> {
+  return request<VoiceProviderView[]>('/ai-girl/voice/providers')
+}
+
+export function saveVoiceCredential(
+  providerId: string,
+  fields: Readonly<Record<string, string>>
+): Promise<VoiceCredentialView> {
+  return request<VoiceCredentialView>(`/ai-girl/voice/providers/${encodeURIComponent(providerId)}/credential`, {
+    method: 'PUT',
+    body: { fields }
+  })
+}
+
+export function validateVoiceCredential(providerId: string): Promise<VoiceValidationView> {
+  return request<VoiceValidationView>(`/ai-girl/voice/providers/${encodeURIComponent(providerId)}/validate`, {
+    method: 'POST'
+  })
+}
+
+export function deleteVoiceCredential(providerId: string): Promise<void> {
+  return request<void>(`/ai-girl/voice/providers/${encodeURIComponent(providerId)}/credential`, {
+    method: 'DELETE'
+  })
+}
+
+export function generateVoice(
+  mode: GenerationMode,
+  segments: readonly VoiceSegmentInput[]
+): Promise<VoiceBatchView> {
+  return request<VoiceBatchView>('/ai-girl/voice/generate', { method: 'POST', body: { mode, segments } })
+}
+
+export function getVoiceBatch(batchId: string): Promise<VoiceBatchView> {
+  return request<VoiceBatchView>(`/ai-girl/voice/generate/${encodeURIComponent(batchId)}`)
+}

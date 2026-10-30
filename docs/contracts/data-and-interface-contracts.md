@@ -308,6 +308,28 @@
 
 当前规范采用 `created_at / updated_at / deleted_at / occurred_at`。原始需求提出 `create_date + create_time + update_date + update_time` 四字段方案；两者不混用。未确认前按本规范实现，确认后统一迁移（见 C-6）。
 
+### 2.14 user_voice_credentials（V7）
+
+语音工作台 BYOK 凭据（docs/15、docs/17）。一个用户 × 一个 provider 一行；**不存明文 Key**。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | BIGINT | 主键（雪花 ID） |
+| user_id | BIGINT | 归属（外键 `users.id`） |
+| provider_id | VARCHAR(64) | 模型标识，如 `cosyvoice` / `breeze`；不是枚举，注册表新增即生效 |
+| encrypted_payload | TEXT | AES-256-GCM 密文（内含该 provider 的字段 JSON）；密钥来自 `VOICE_CREDENTIALS_KEY` |
+| status | VARCHAR(20) | `active` / `invalid`；保存时强制校验通过才写 `active` |
+| last_verified_at | DATETIME(3) | 最近一次校验时间 |
+| created_at / updated_at | DATETIME(3) | 审计 |
+
+约束：
+
+- `UNIQUE(user_id, provider_id)`；所有查询必须带 `user_id`；
+- 任何响应不回显密文与明文，只回显 `configured`、`status`、非 secret 字段与已配置的 secret 字段名；
+- 更新时 secret 字段留空表示保留原值，避免“改一个字段丢另一个 Key”；
+- 该表不设 `deleted_at`：删除凭据与账号删除都物理删除该行；
+- 与 `user_llm_settings` 不同，这里**必须**表述为加密存储；主密钥轮换是已知未决项（见 C-11）。
+
 ## 3. REST 接口
 
 前缀 `/api/v1`。身份来自认证上下文，路径与查询参数不接受归属用户。
@@ -536,6 +558,29 @@
 - Key 当前以明文存于 MySQL `user_llm_settings.api_key`，仅服务端读取；接口只暴露 `hasApiKey`，日志与错误体不得包含 Key；
 - A 的凭证不能读取、修改或测试 B 的配置，也不存在按 userId 操作的入口；越权访问按 404 处理。
 
+### 3.7.1 语音工作台（`/ai-girl/voice`）
+
+配置驱动的多模型语音生成（docs/16、docs/17）。前端只依赖本节契约，不接触厂商原生协议；模型差异全部来自 `providers` 返回的 descriptor。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/ai-girl/voice/providers` | 模型列表：descriptor（能力、credentialFields、generationFields、上限、enabled）+ 当前用户凭据状态 |
+| PUT | `/ai-girl/voice/providers/{providerId}/credential` | 保存凭据（body `{fields:{...}}`）；服务端先校验再落库，失败 400 |
+| POST | `/ai-girl/voice/providers/{providerId}/validate` | 用已保存凭据做最小连通性校验，返回 `{valid,message}` |
+| DELETE | `/ai-girl/voice/providers/{providerId}/credential` | 删除凭据，204 |
+| POST | `/ai-girl/voice/generate` | 批量生成：`{mode, segments[]}`，202 返回 batch；mode ∈ `single`/`single_two`/`dual` |
+| GET | `/ai-girl/voice/generate/{batchId}` | 查询 batch 状态与段落结果 |
+
+规则：
+
+- `segments[]` 每项 `{id, providerId, capability, text, params}`；capability ∈ `SPEAK/SING/HUM`；服务端校验 provider 声明了该能力且 `enabled=true`；
+- `single_two` 两段必须同一 provider；`dual` 两段必须不同 provider；段数与模式不符返回 400 `VOICE_INVALID_REQUEST`；
+- `params` 只接受该 capability 的 generationFields 中声明的 key；文本超过 `maxTextChars` 返回 400；
+- 凭据视图只回显非 secret 字段与 `configuredSecrets` 名单；secret 字段留空 = 保留原值；
+- batch 状态：`queued/running/succeeded/partial/failed`；段落状态：`queued/generating/succeeded/failed`；失败段带稳定 `errorCode`；
+- 生成结果当前保留在内存任务中（7 天窗口，重启丢失）；持久化与对象存储是已知未决项（见 C-12）；
+- 错误码：`VOICE_PROVIDER_NOT_FOUND`(404)、`VOICE_PROVIDER_DISABLED`(400)、`VOICE_CAPABILITY_UNSUPPORTED`(400)、`VOICE_CREDENTIAL_MISSING`(400)、`VOICE_CREDENTIAL_INVALID`(400)、`VOICE_CREDENTIAL_REQUIRED`(400)、`VOICE_INVALID_REQUEST`(400)、`VOICE_BATCH_NOT_FOUND`(404)、`VOICE_PROVIDER_UNAVAILABLE`(502)。
+
 ### 3.8 搜索
 
 | 方法 | 路径 | 说明 |
@@ -758,6 +803,7 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 13. A 无法读取/修改/删除 B 的自定义角色，A 无法用 B 的 characterId 创建会话或查询关系状态；
 14. 归档角色不出现在切换器/新建会话中，但已有会话仍可继续；彻底删除角色后会话、消息、记忆、状态与本机立绘无残留；
 15. 每个 `(user_id, character_id)` 最多一条会话：重复/并发 `POST /conversations` 只产生一条，`DELETE /conversations/{id}` 返回 409，清空聊天记录后会话仍存在。
+16. A 无法读取、修改、测试或删除 B 的语音 BYOK 凭据与生成任务；账号删除后 `user_voice_credentials` 行与内存生成任务均无残留。
 
 ## 10. 隐私分级
 
@@ -789,3 +835,5 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 | C-8 | `operator` 角色模型与授权流程 | 独立角色、审批授予、可撤销；见 ADR-0002 |
 | C-9 | 运营检索脱敏规则与可展示字段 | 默认仅摘要与元数据，正文展示需单独授权并留痕 |
 | C-10 | 搜索索引实现与切换时点 | P1 MySQL FULLTEXT/ngram，命中质量或延迟不达标时切 OpenSearch |
+| C-11 | `VOICE_CREDENTIALS_KEY` 主密钥轮换 | 已知未决：当前密文与单一主密钥绑定，轮换需要“旧钥解密 + 新钥重加密”迁移任务 |
+| C-12 | 语音生成 batch 持久化 | 当前为内存任务（7 天窗口、重启丢失）；持久化到 `voice_generation_jobs` + 音频入对象存储是下一迭代项 |

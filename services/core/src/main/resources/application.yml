@@ -99,6 +99,16 @@ shenyouchu:
     asr-url: ${VOICE_ASR_URL:}
     tts-url: ${VOICE_TTS_URL:}
     timeout-seconds: ${VOICE_TIMEOUT_SECONDS:30}
+    credentials-key: ${VOICE_CREDENTIALS_KEY:dev-only-key-please-change-me-32}
+    cosyvoice:
+      # 百炼 CosyVoice-v3-Flash（DashScope 原生协议）；凭据由用户在语音工作台 BYOK 填写。
+      enabled: ${VOICE_COSYVOICE_ENABLED:true}
+      max-text-chars: ${VOICE_COSYVOICE_MAX_TEXT_CHARS:1000}
+    breeze:
+      # Breeze TTS 2（原生协议，xi-api-key）；后台开关，默认关闭（docs/15 决策 2）。
+      enabled: ${VOICE_BREEZE_ENABLED:false}
+      base-url: ${VOICE_BREEZE_BASE_URL:https://api.breeze.blue}
+      max-text-chars: ${VOICE_BREEZE_MAX_TEXT_CHARS:300}
   redis:
     # true 时账号删除会清理 Redis 中的会话/临时键（键约定见契约 7.1）。
     enabled: ${REDIS_ENABLED:false}

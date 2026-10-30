@@ -5709,3 +5709,202 @@ select {
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
+
+/* ---------- 语音生成工作台（docs/16、docs/17） ---------- */
+
+.vb__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vb__mode {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.vb__mode:hover:not(:disabled) {
+  color: var(--text);
+  border-color: #cfcfcf;
+}
+
+.vb__mode--active {
+  background: var(--text);
+  border-color: var(--text);
+  color: #fff;
+  font-weight: 600;
+}
+
+.vb__mode:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vb__cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.vb__card {
+  margin: 0;
+}
+
+.vb__card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.vb__caps {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.vb__cred {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vb__chip {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.vb__chip--ok {
+  background: rgba(7, 193, 96, 0.1);
+  border-color: rgba(7, 193, 96, 0.35);
+  color: var(--green-dark);
+}
+
+.vb__chip--fail {
+  background: rgba(230, 67, 64, 0.08);
+  border-color: rgba(230, 67, 64, 0.35);
+  color: var(--danger);
+}
+
+.vb__chip--busy {
+  background: rgba(20, 120, 255, 0.08);
+  border-color: rgba(20, 120, 255, 0.3);
+  color: #1478ff;
+}
+
+.vb__chip--off {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.vb__segments {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vb__segment {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vb__segment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.vb__segment-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.vb__params {
+  align-items: flex-start;
+}
+
+.vb__result audio {
+  width: 100%;
+  height: 36px;
+}
+
+.vb__skeleton {
+  min-height: 220px;
+  border-radius: 12px;
+  background: linear-gradient(100deg, #ececec 30%, #f6f6f6 50%, #ececec 70%);
+  background-size: 200% 100%;
+  animation: vb-shimmer 1.2s infinite linear;
+}
+
+@keyframes vb-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.vb__empty {
+  padding: 26px 18px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.vb__empty-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.vb__empty-desc {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.vf__field {
+  min-width: 0;
+}
+
+.vf__required {
+  color: var(--danger);
+}
+
+.vf__error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.vf__error .btn {
+  margin-left: 8px;
+}
+
+@media (max-width: 1100px) {
+  .vb__cards {
+    grid-template-columns: 1fr;
+  }
+}

@@ -42,6 +42,7 @@ import type { PortraitSet } from './portrait/expression'
 import { clearPortraits } from './portrait/portraitStorage'
 import SettingsPanel from './SettingsPanel'
 import Icon, { type IconName } from './ui/Icon'
+import VoiceWorkbench from './voice/VoiceWorkbench'
 
 /**
  * 应用根组件：未登录显示登录/注册页，已登录显示微信式三栏工作区。
@@ -51,7 +52,7 @@ import Icon, { type IconName } from './ui/Icon'
  */
 
 type AuthMode = 'login' | 'register'
-type Section = 'chats' | 'characters' | 'memories' | 'activity' | 'settings'
+type Section = 'chats' | 'characters' | 'memories' | 'activity' | 'voice' | 'settings'
 
 interface AuthFormState {
   readonly mode: AuthMode
@@ -79,7 +80,8 @@ const NAV_ITEMS: readonly { readonly id: Section; readonly label: string; readon
   { id: 'chats', label: '聊天', icon: 'chat' },
   { id: 'characters', label: '角色', icon: 'sparkles' },
   { id: 'memories', label: '记忆', icon: 'book' },
-  { id: 'activity', label: '活动', icon: 'pulse' }
+  { id: 'activity', label: '活动', icon: 'pulse' },
+  { id: 'voice', label: '语音', icon: 'mic' }
 ]
 
 /** 把 unknown 异常转成可展示的中文文案（网络层失败与业务错误分开表述）。 */
@@ -986,6 +988,8 @@ export default function App() {
             />
           ) : section === 'activity' ? (
             <ActivityPanel characters={displayCharacters} conversations={conversations} />
+          ) : section === 'voice' ? (
+            <VoiceWorkbench />
           ) : (
             <SettingsPanel
               user={user}
