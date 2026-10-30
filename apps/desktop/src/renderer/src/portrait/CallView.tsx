@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   ApiError,
+  getVoiceSettings,
+  speakVoice,
   streamTurn,
   type CharacterState,
-  type Conversation
+  type Conversation,
+  type VoiceSettingsView
 } from '../api/client'
 import type { AvatarConfig } from '../avatar/avatarConfig'
 import Icon from '../ui/Icon'
@@ -17,9 +20,7 @@ import { blobToBase64, pickAudioMimeType, recordingSupported } from '../voice/re
 import { speak, speechSupported, stopSpeaking } from '../voice/tts'
 import {
   isAsrEnabled,
-  isCloudTts,
   loadAsrConfig,
-  loadTtsConfig,
   type AsrConfig
 } from '../voice/voiceConfig'
 import AvatarPortrait from './AvatarPortrait'
@@ -121,6 +122,7 @@ export default function CallView({
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const asrConfigRef = useRef<AsrConfig | null>(null)
+  const voiceSettingsRef = useRef<VoiceSettingsView | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const lastLevelAt = useRef(0)
 
@@ -130,6 +132,23 @@ export default function CallView({
     }, 1000)
     return () => {
       window.clearInterval(timer)
+    }
+  }, [])
+
+  /* 通话默认声音在服务端（跨设备一致）；进通话时取一次，失败则回退系统语音。 */
+  useEffect(() => {
+    let active = true
+    void getVoiceSettings()
+      .then((settings) => {
+        if (active) {
+          voiceSettingsRef.current = settings
+        }
+      })
+      .catch(() => {
+        voiceSettingsRef.current = null
+      })
+    return () => {
+      active = false
     }
   }, [])
 
@@ -235,23 +254,18 @@ export default function CallView({
     if (closedRef.current) {
       return
     }
-    const tts = loadTtsConfig()
-    if (isCloudTts(tts) && window.desktop?.tts !== undefined && audioPlaybackSupported()) {
+    const settings = voiceSettingsRef.current
+    if (settings !== null && settings.configured && settings.enabled && audioPlaybackSupported()) {
       const token = speechToken.current + 1
       speechToken.current = token
       setUsingAudio(true)
       setSpeaking(true)
       try {
-        const dataUrl = await window.desktop.tts.synthesize({
-          baseUrl: tts.baseUrl,
-          apiKey: tts.apiKey,
-          model: tts.model,
-          voice: tts.voice,
-          text
-        })
+        const result = await speakVoice({ text })
         if (closedRef.current || speechToken.current !== token) {
           return
         }
+        const dataUrl = `data:audio/${result.format};base64,${result.audioBase64}`
         const handle = await playAudioDataUrl(dataUrl, {
           onLevel: (level) => {
             const now = performance.now()
@@ -276,13 +290,13 @@ export default function CallView({
         })
         audioRef.current = handle
         return
-      } catch (cloudError) {
+      } catch (voiceError) {
         if (closedRef.current) {
           return
         }
         setUsingAudio(false)
         setSpeaking(false)
-        setError(`云端语音失败，已回退系统语音：${cleanVoiceError(cloudError)}`)
+        setError(`默认语音失败，已回退系统语音：${cleanVoiceError(voiceError)}`)
       }
     }
 

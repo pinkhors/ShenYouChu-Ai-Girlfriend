@@ -1,7 +1,6 @@
 import type { UserView } from './api/client'
 import LlmSettingsCard from './LlmSettingsCard'
 import Icon from './ui/Icon'
-import VoiceSettings from './voice/VoiceSettings'
 
 interface SettingsPanelProps {
   readonly user: UserView
@@ -76,8 +75,6 @@ export default function SettingsPanel({
         </section>
 
         <LlmSettingsCard />
-
-        <VoiceSettings />
 
         <section className="setting-card setting-card--danger">
           <h2 className="setting-card__title">危险操作</h2>

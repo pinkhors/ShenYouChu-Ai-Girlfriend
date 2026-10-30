@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 语音工作台统一接口：Provider 元数据、BYOK 凭据、批量生成。
+ * 语音工作台统一接口：Provider 元数据、BYOK 凭据、批量生成、通话默认声音与同步说话。
  * 前端只依赖这些接口，不直接接触 CosyVoice/Breeze 的原生协议。
  */
 @RestController
@@ -24,11 +24,17 @@ public class VoiceProviderController {
 
     private final VoiceCredentialService credentialService;
     private final VoiceGenerationService generationService;
+    private final VoiceSettingsService settingsService;
+    private final VoiceSpeechService speechService;
 
     public VoiceProviderController(VoiceCredentialService credentialService,
-                                   VoiceGenerationService generationService) {
+                                   VoiceGenerationService generationService,
+                                   VoiceSettingsService settingsService,
+                                   VoiceSpeechService speechService) {
         this.credentialService = credentialService;
         this.generationService = generationService;
+        this.settingsService = settingsService;
+        this.speechService = speechService;
     }
 
     @GetMapping("/providers")
@@ -51,6 +57,22 @@ public class VoiceProviderController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteCredential(@PathVariable String providerId) {
         credentialService.delete(CurrentUser.require().userId(), providerId);
+    }
+
+    @GetMapping("/settings")
+    public VoiceSettingsView settings() {
+        return settingsService.get(CurrentUser.require().userId());
+    }
+
+    @PutMapping("/settings")
+    public VoiceSettingsView saveSettings(@RequestBody VoiceSettingsRequest request) {
+        return settingsService.save(CurrentUser.require().userId(), request);
+    }
+
+    /** 通话页按句调用；不传 providerId 时使用用户默认声音。 */
+    @PostMapping("/speak")
+    public VoiceSpeakResponse speak(@RequestBody VoiceSpeakRequest request) {
+        return speechService.speak(CurrentUser.require().userId(), request);
     }
 
     @PostMapping("/generate")

@@ -727,3 +727,40 @@ export function generateVoice(
 export function getVoiceBatch(batchId: string): Promise<VoiceBatchView> {
   return request<VoiceBatchView>(`/ai-girl/voice/generate/${encodeURIComponent(batchId)}`)
 }
+
+export interface VoiceSettingsView {
+  readonly configured: boolean
+  readonly enabled: boolean
+  readonly providerId: string | null
+  readonly params: Readonly<Record<string, string>>
+}
+
+export interface VoiceSettingsInput {
+  readonly enabled: boolean
+  readonly providerId: string
+  readonly params: Readonly<Record<string, string>>
+}
+
+export interface VoiceSpeakResponse {
+  readonly audioBase64: string
+  readonly format: string
+  readonly provider: string
+  readonly latencyMs: number
+}
+
+export function getVoiceSettings(): Promise<VoiceSettingsView> {
+  return request<VoiceSettingsView>('/ai-girl/voice/settings')
+}
+
+export function saveVoiceSettings(input: VoiceSettingsInput): Promise<VoiceSettingsView> {
+  return request<VoiceSettingsView>('/ai-girl/voice/settings', { method: 'PUT', body: input })
+}
+
+/** 通话页按句调用；不传 providerId 时使用服务端保存的默认声音。 */
+export function speakVoice(input: {
+  readonly text: string
+  readonly providerId?: string
+  readonly params?: Readonly<Record<string, string>>
+}): Promise<VoiceSpeakResponse> {
+  return request<VoiceSpeakResponse>('/ai-girl/voice/speak', { method: 'POST', body: input })
+}

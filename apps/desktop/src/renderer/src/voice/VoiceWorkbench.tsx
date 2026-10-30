@@ -14,6 +14,8 @@ import {
   type VoiceSegmentView
 } from '../api/client'
 import Icon from '../ui/Icon'
+import AsrSettings from './AsrSettings'
+import DefaultVoiceSettings from './DefaultVoiceSettings'
 import DynamicField from './DynamicField'
 import {
   availableModes,
@@ -408,6 +410,8 @@ export default function VoiceWorkbench() {
         ))}
       </div>
 
+      <DefaultVoiceSettings providers={views} />
+
       {draft !== null && status !== 'setup_required' ? (
         <div className="setting-card">
           <h2 className="setting-card__title">内容</h2>
@@ -561,6 +565,8 @@ export default function VoiceWorkbench() {
           ) : null}
         </div>
       ) : null}
+
+      <AsrSettings />
     </section>
   )
 }

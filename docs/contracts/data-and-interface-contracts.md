@@ -330,6 +330,25 @@
 - 该表不设 `deleted_at`：删除凭据与账号删除都物理删除该行；
 - 与 `user_llm_settings` 不同，这里**必须**表述为加密存储；主密钥轮换是已知未决项（见 C-11）。
 
+### 2.15 user_voice_settings（V8）
+
+用户级「通话默认声音」，一个用户一条。只存可展示的生成参数（如 voiceId/language/instruction），**不存任何 Key**。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| user_id | BIGINT | 主键，同时是归属（外键 `users.id`） |
+| enabled | BOOLEAN | 是否启用；`false` 时通话回退系统语音 |
+| provider_id | VARCHAR(64) | 默认模型，必须存在、已启用、支持 SPEAK、凭据有效 |
+| params_json | TEXT | 该模型 SPEAK 能力的生成参数；保存时按 descriptor 的 required 字段校验 |
+| created_at / updated_at | DATETIME(3) | 审计 |
+
+约束：
+
+- 保存前必须能 `resolve` 到该 provider 的有效凭据（否则 400 `VOICE_CREDENTIAL_MISSING`），避免“设置成功但通话必失败”；
+- 只接受 descriptor 中声明的参数 key，未知 key 忽略；required 缺失返回 400 `VOICE_SETTINGS_INVALID`；
+- 该表不设 `deleted_at`：账号删除时随用户物理删除；
+- ASR 配置仍在本机 `localStorage`（OpenAI 兼容识别服务），不在本表。
+
 ## 3. REST 接口
 
 前缀 `/api/v1`。身份来自认证上下文，路径与查询参数不接受归属用户。
@@ -568,6 +587,9 @@
 | PUT | `/ai-girl/voice/providers/{providerId}/credential` | 保存凭据（body `{fields:{...}}`）；服务端先校验再落库，失败 400 |
 | POST | `/ai-girl/voice/providers/{providerId}/validate` | 用已保存凭据做最小连通性校验，返回 `{valid,message}` |
 | DELETE | `/ai-girl/voice/providers/{providerId}/credential` | 删除凭据，204 |
+| GET | `/ai-girl/voice/settings` | 通话默认声音；未配置返回 `configured=false` |
+| PUT | `/ai-girl/voice/settings` | 保存默认声音 `{enabled, providerId, params}`；先校验 provider/能力/required 参数/凭据 |
+| POST | `/ai-girl/voice/speak` | 同步单段说话 `{text, providerId?, params?}`；不传 provider 用默认声音；返回 `{audioBase64,format,provider,latencyMs}` |
 | POST | `/ai-girl/voice/generate` | 批量生成：`{mode, segments[]}`，202 返回 batch；mode ∈ `single`/`single_two`/`dual` |
 | GET | `/ai-girl/voice/generate/{batchId}` | 查询 batch 状态与段落结果 |
 
@@ -579,7 +601,8 @@
 - 凭据视图只回显非 secret 字段与 `configuredSecrets` 名单；secret 字段留空 = 保留原值；
 - batch 状态：`queued/running/succeeded/partial/failed`；段落状态：`queued/generating/succeeded/failed`；失败段带稳定 `errorCode`；
 - 生成结果当前保留在内存任务中（7 天窗口，重启丢失）；持久化与对象存储是已知未决项（见 C-12）；
-- 错误码：`VOICE_PROVIDER_NOT_FOUND`(404)、`VOICE_PROVIDER_DISABLED`(400)、`VOICE_CAPABILITY_UNSUPPORTED`(400)、`VOICE_CREDENTIAL_MISSING`(400)、`VOICE_CREDENTIAL_INVALID`(400)、`VOICE_CREDENTIAL_REQUIRED`(400)、`VOICE_INVALID_REQUEST`(400)、`VOICE_BATCH_NOT_FOUND`(404)、`VOICE_PROVIDER_UNAVAILABLE`(502)。
+- 错误码：`VOICE_PROVIDER_NOT_FOUND`(404)、`VOICE_PROVIDER_DISABLED`(400)、`VOICE_CAPABILITY_UNSUPPORTED`(400)、`VOICE_CREDENTIAL_MISSING`(400)、`VOICE_CREDENTIAL_INVALID`(400)、`VOICE_CREDENTIAL_REQUIRED`(400)、`VOICE_SETTINGS_MISSING`(400)、`VOICE_SETTINGS_INVALID`(400)、`VOICE_INVALID_REQUEST`(400)、`VOICE_BATCH_NOT_FOUND`(404)、`VOICE_PROVIDER_UNAVAILABLE`(502)。
+- 通话页只调 `/speak`；旧的本机 OpenAI 兼容 TTS（`window.desktop.tts`）在当前版本保留代码但 **UI 已隐藏且通话页不再调用**，下个迭代删除。
 
 ### 3.8 搜索
 
@@ -804,6 +827,7 @@ media:{userId}:{mediaSessionId}         # 媒体绑定，TTL
 14. 归档角色不出现在切换器/新建会话中，但已有会话仍可继续；彻底删除角色后会话、消息、记忆、状态与本机立绘无残留；
 15. 每个 `(user_id, character_id)` 最多一条会话：重复/并发 `POST /conversations` 只产生一条，`DELETE /conversations/{id}` 返回 409，清空聊天记录后会话仍存在。
 16. A 无法读取、修改、测试或删除 B 的语音 BYOK 凭据与生成任务；账号删除后 `user_voice_credentials` 行与内存生成任务均无残留。
+17. A 无法读取或覆盖 B 的 `user_voice_settings`；账号删除后该行无残留。
 
 ## 10. 隐私分级
 

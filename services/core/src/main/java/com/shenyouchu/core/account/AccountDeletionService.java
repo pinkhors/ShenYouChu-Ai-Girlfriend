@@ -19,7 +19,9 @@ import com.shenyouchu.core.relationship.mapper.UserCharacterStateMapper;
 import com.shenyouchu.core.user.User;
 import com.shenyouchu.core.user.mapper.UserMapper;
 import com.shenyouchu.core.voice.provider.VoiceCredential;
+import com.shenyouchu.core.voice.provider.VoiceSettings;
 import com.shenyouchu.core.voice.provider.mapper.VoiceCredentialMapper;
+import com.shenyouchu.core.voice.provider.mapper.VoiceSettingsMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +45,7 @@ public class AccountDeletionService {
     private final UserCharacterStateMapper stateMapper;
     private final UserLlmSettingsMapper llmSettingsMapper;
     private final VoiceCredentialMapper voiceCredentialMapper;
+    private final VoiceSettingsMapper voiceSettingsMapper;
     private final CharacterMapper characterMapper;
     private final UserPreferenceMapper preferenceMapper;
     private final ActivityService activityService;
@@ -56,6 +59,7 @@ public class AccountDeletionService {
                                   UserCharacterStateMapper stateMapper,
                                   UserLlmSettingsMapper llmSettingsMapper,
                                   VoiceCredentialMapper voiceCredentialMapper,
+                                  VoiceSettingsMapper voiceSettingsMapper,
                                   CharacterMapper characterMapper,
                                   UserPreferenceMapper preferenceMapper,
                                   ActivityService activityService,
@@ -68,6 +72,7 @@ public class AccountDeletionService {
         this.stateMapper = stateMapper;
         this.llmSettingsMapper = llmSettingsMapper;
         this.voiceCredentialMapper = voiceCredentialMapper;
+        this.voiceSettingsMapper = voiceSettingsMapper;
         this.characterMapper = characterMapper;
         this.preferenceMapper = preferenceMapper;
         this.activityService = activityService;
@@ -92,6 +97,8 @@ public class AccountDeletionService {
         /* 语音 BYOK 凭据物理删除：密文随账号一起清除，不保留。 */
         int voiceCredentials = voiceCredentialMapper.delete(Wrappers.<VoiceCredential>lambdaQuery()
                 .eq(VoiceCredential::getUserId, userId));
+        int voiceSettings = voiceSettingsMapper.delete(Wrappers.<VoiceSettings>lambdaQuery()
+                .eq(VoiceSettings::getUserId, userId));
         /* 只删自定义角色；官方角色 owner_user_id 为 NULL，不会被匹配。 */
         int characters = characterMapper.delete(Wrappers.<CharacterProfile>lambdaQuery()
                 .eq(CharacterProfile::getOwnerUserId, userId));
@@ -111,7 +118,7 @@ public class AccountDeletionService {
         activityService.record(userId, "data.deletion_completed", "SYSTEM", "core", null, null, null,
                 Map.of("sessions", sessions, "messages", messages, "memories", memories,
                         "conversations", conversations, "states", states, "llmSettings", llmSettings,
-                        "voiceCredentials", voiceCredentials,
+                        "voiceCredentials", voiceCredentials, "voiceSettings", voiceSettings,
                         "characters", characters, "preferences", preferences));
     }
 }
